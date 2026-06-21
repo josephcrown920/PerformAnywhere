@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Perform Anywhere"
+version = "1.0.0"
+id = "artifacts/perform-anywhere"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21597
+
+[services.development]
+run = "pnpm --filter @workspace/perform-anywhere run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/perform-anywhere", "run", "build" ]
+publicDir = "artifacts/perform-anywhere/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21597"
+BASE_PATH = "/"
