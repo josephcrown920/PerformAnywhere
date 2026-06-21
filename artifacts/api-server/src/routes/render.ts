@@ -145,25 +145,37 @@ async function startRenderJob(opts: {
 
     const { videoAdapters } = await import("../lib/orchestrate/providers.js");
 
-    // Use the chosen model directly — no fallback
-    const provider = preferredProvider ?? (
-      chosenModel === "hailuo" ? "hailuo"
-      : chosenModel === "fal" ? "fal"
-      : "kling"
-    );
+    // Fallback chain: Kling → Replicate (Fal/Hailuo excluded — no credits)
+    const primaryProvider = preferredProvider ?? "kling";
+    const providerOrder = [
+      primaryProvider,
+      ...["kling", "replicate"].filter((p) => p !== primaryProvider),
+    ];
 
-    const adapterModel = provider === "kling"
-      ? (chosenModel.startsWith("kling") ? chosenModel : "kling-v1-6-std")
-      : provider === "hailuo" ? "hailuo"
-      : "fal-ai/kling-video/v1.6/standard/image-to-video";
-
-    const adapter = videoAdapters[provider];
-    if (!adapter) throw new Error(`Provider "${provider}" is not configured`);
+    const modelForProvider = (p: string) => {
+      if (p === "kling") return chosenModel.startsWith("kling") ? chosenModel : "kling-v1-6-std";
+      return "minimax/video-01";
+    };
 
     const options: Record<string, unknown> = { duration: 5 };
     if (identityUrl) options.imageUrl = identityUrl;
 
-    const result = await adapter({ model: adapterModel, prompt, options });
+    let lastError = "no provider succeeded";
+    let result: { provider: string; model: string; output_url: string; raw?: unknown } | null = null;
+
+    for (const p of providerOrder) {
+      const adapter = videoAdapters[p];
+      if (!adapter) continue;
+      try {
+        const r = await adapter({ model: modelForProvider(p), prompt, options });
+        if (r?.output_url) { result = r as typeof result; break; }
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+        console.error(`[render] ${p} failed:`, lastError);
+      }
+    }
+
+    if (!result) throw new Error(lastError);
 
     // Download and store the rendered video
     const outputPath = `${clientId}/${projectId}/render.mp4`;

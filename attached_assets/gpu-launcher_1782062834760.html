@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPU Workflow Launcher</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0c10; --surface: #111318; --surface2: #181c24;
+    --border: #1e2330; --border2: #2a3044;
+    --text: #e8ecf4; --muted: #6b7592;
+    --accent: #4ade80; --accent2: #22d3ee; --accent3: #a78bfa;
+    --warn: #fbbf24; --red: #f87171;
+    --modal-green: #00ff88; --runpod-purple: #a855f7; --replit-orange: #f97316;
+  }
+  body { font-family: 'Space Grotesk', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+  .grid-bg { position: fixed; inset: 0; background-image: linear-gradient(rgba(74,222,128,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(74,222,128,0.03) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; z-index: 0; }
+  .scanline { position: fixed; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: scan 4s linear infinite; opacity: 0.4; z-index: 1; pointer-events: none; }
+  @keyframes scan { 0% { top: -2px; } 100% { top: 100vh; } }
+  .container { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 4rem; position: relative; z-index: 2; }
+  header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
+  .logo { width: 40px; height: 40px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .logo svg { width: 22px; height: 22px; fill: #000; }
+  h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: -0.02em; }
+  .subtitle { font-size: 0.8rem; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+  .status-dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; margin-left: auto; animation: pulse 2s ease-in-out infinite; flex-shrink: 0; }
+  @keyframes pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(74,222,128,0.4); } 50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(74,222,128,0); } }
+  .section-label { font-size: 0.7rem; font-family: 'JetBrains Mono', monospace; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.75rem; }
+  .platform-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 2rem; }
+  .platform-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; cursor: pointer; transition: all 0.15s ease; position: relative; overflow: hidden; }
+  .platform-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; opacity: 0; transition: opacity 0.15s ease; }
+  .platform-card.modal::before { background: var(--modal-green); }
+  .platform-card.runpod::before { background: var(--runpod-purple); }
+  .platform-card.replit::before { background: var(--replit-orange); }
+  .platform-card:hover { border-color: var(--border2); transform: translateY(-1px); }
+  .platform-card.active { border-color: var(--border2); background: var(--surface2); }
+  .platform-card.active::before { opacity: 1; }
+  .platform-name { font-size: 0.95rem; font-weight: 600; margin-bottom: 4px; }
+  .platform-card.modal .platform-name { color: var(--modal-green); }
+  .platform-card.runpod .platform-name { color: var(--runpod-purple); }
+  .platform-card.replit .platform-name { color: var(--replit-orange); }
+  .platform-desc { font-size: 0.75rem; color: var(--muted); line-height: 1.5; }
+  .platform-tag { display: inline-block; font-size: 0.65rem; font-family: 'JetBrains Mono', monospace; padding: 2px 7px; border-radius: 4px; margin-top: 8px; border: 1px solid; }
+  .platform-card.modal .platform-tag { color: var(--modal-green); border-color: rgba(74,222,128,0.3); background: rgba(74,222,128,0.06); }
+  .platform-card.runpod .platform-tag { color: var(--runpod-purple); border-color: rgba(168,85,247,0.3); background: rgba(168,85,247,0.06); }
+  .platform-card.replit .platform-tag { color: var(--replit-orange); border-color: rgba(249,115,22,0.3); background: rgba(249,115,22,0.06); }
+  .config-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem; }
+  .config-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .config-row:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 0.7rem; font-family: 'JetBrains Mono', monospace; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .field select, .field input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; padding: 8px 10px; outline: none; transition: border-color 0.15s; appearance: none; }
+  .field select:focus, .field input:focus { border-color: var(--accent); }
+  .field select option { background: var(--surface2); }
+  .field textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; padding: 10px; outline: none; resize: vertical; min-height: 80px; transition: border-color 0.15s; line-height: 1.6; }
+  .field textarea:focus { border-color: var(--accent); }
+  .generate-btn { width: 100%; background: var(--accent); color: #000; border: none; border-radius: 8px; padding: 12px; font-family: 'Space Grotesk', sans-serif; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.15s ease; letter-spacing: -0.01em; margin-bottom: 1.5rem; }
+  .generate-btn:hover { background: #86efac; transform: translateY(-1px); }
+  .output-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: none; }
+  .output-panel.visible { display: block; }
+  .output-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .output-filename { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--muted); }
+  .output-filename span { color: var(--accent); }
+  .copy-btn { background: transparent; border: 1px solid var(--border2); border-radius: 5px; color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; padding: 4px 10px; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 5px; }
+  .copy-btn:hover, .copy-btn.copied { border-color: var(--accent); color: var(--accent); }
+  pre { padding: 1.25rem; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; line-height: 1.7; color: var(--text); overflow-x: auto; white-space: pre; tab-size: 2; }
+  .line-kw { color: #a78bfa; } .line-str { color: #fbbf24; } .line-comment { color: #6b7592; } .line-fn { color: #22d3ee; } .line-num { color: #4ade80; }
+  .info-strip { display: flex; gap: 16px; padding: 10px 14px; border-top: 1px solid var(--border); background: var(--surface2); flex-wrap: wrap; }
+  .info-item { font-size: 0.7rem; color: var(--muted); font-family: 'JetBrains Mono', monospace; display: flex; align-items: center; gap: 6px; }
+  .info-item span { color: var(--accent); }
+  .next-steps { margin-top: 1.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: none; }
+  .next-steps.visible { display: block; }
+  .next-steps-header { padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface2); font-size: 0.7rem; font-family: 'JetBrains Mono', monospace; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .steps-list { padding: 1rem 1.25rem; list-style: none; counter-reset: steps; }
+  .steps-list li { counter-increment: steps; padding: 8px 0; font-size: 0.82rem; color: var(--muted); border-bottom: 1px solid var(--border); display: flex; gap: 12px; line-height: 1.5; }
+  .steps-list li:last-child { border-bottom: none; }
+  .steps-list li::before { content: "0" counter(steps); font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--accent); flex-shrink: 0; margin-top: 1px; }
+  .steps-list a { color: #22d3ee; text-decoration: none; }
+  .steps-list a:hover { text-decoration: underline; }
+  code { background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.2); border-radius: 3px; padding: 1px 5px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--accent); }
+  @media (max-width: 600px) { .platform-grid { grid-template-columns: 1fr; } .config-row { grid-template-columns: 1fr; } h1 { font-size: 1.1rem; } }
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="scanline"></div>
+<div class="container">
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4zM2 4h2v16H2zm18 0h2v16h-2z"/></svg>
+    </div>
+    <div>
+      <h1>GPU Workflow Launcher</h1>
+      <div class="subtitle">// generate &middot; deploy &middot; run</div>
+    </div>
+    <div class="status-dot" title="Ready"></div>
+  </header>
+
+  <div class="section-label">01 &mdash; Select platform</div>
+  <div class="platform-grid">
+    <div class="platform-card modal active" onclick="selectPlatform('modal', this)">
+      <div class="platform-name">Modal.com</div>
+      <div class="platform-desc">Serverless GPU functions. Pay per second, no idle cost.</div>
+      <div class="platform-tag">A100 / H100</div>
+    </div>
+    <div class="platform-card runpod" onclick="selectPlatform('runpod', this)">
+      <div class="platform-name">RunPod</div>
+      <div class="platform-desc">REST endpoint from any GPU pod. Custom containers.</div>
+      <div class="platform-tag">Serverless API</div>
+    </div>
+    <div class="platform-card replit" onclick="selectPlatform('replit', this)">
+      <div class="platform-name">Replit GPU</div>
+      <div class="platform-desc">Native T4 GPU inside your Replit workspace.</div>
+      <div class="platform-tag">T4 &middot; Native</div>
+    </div>
+  </div>
+
+  <div class="section-label">02 &mdash; Configure job</div>
+  <div class="config-panel">
+    <div class="config-row">
+      <div class="field">
+        <label>Workload type</label>
+        <select id="workload">
+          <option value="inference">Model inference</option>
+          <option value="training">Model fine-tuning</option>
+          <option value="diffusion">Image generation (Diffusion)</option>
+          <option value="custom">Custom Python script</option>
+          <option value="embedding">Embeddings batch job</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>GPU tier</label>
+        <select id="gpu">
+          <option value="t4">NVIDIA T4 (16GB)</option>
+          <option value="a10g">NVIDIA A10G (24GB)</option>
+          <option value="a100">NVIDIA A100 (40GB)</option>
+          <option value="h100">NVIDIA H100 (80GB)</option>
+        </select>
+      </div>
+    </div>
+    <div class="config-row">
+      <div class="field">
+        <label>Model / Script name</label>
+        <input type="text" id="modelname" value="mistralai/Mistral-7B-v0.1" placeholder="e.g. mistralai/Mistral-7B-v0.1" />
+      </div>
+      <div class="field">
+        <label>Memory (GB)</label>
+        <input type="number" id="memory" value="16" min="4" max="80" />
+      </div>
+    </div>
+    <div class="config-row" style="grid-template-columns:1fr;">
+      <div class="field">
+        <label>Input prompt / payload</label>
+        <textarea id="payload">Explain how neural networks work in simple terms.</textarea>
+      </div>
+    </div>
+  </div>
+
+  <button class="generate-btn" onclick="generate()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+    Generate launch code
+  </button>
+
+  <div class="output-panel" id="outputPanel">
+    <div class="output-header">
+      <div class="output-filename"><span id="outputFilename">modal_gpu_job.py</span></div>
+      <button class="copy-btn" id="copyBtn" onclick="copyCode()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        Copy
+      </button>
+    </div>
+    <pre id="codeOutput"></pre>
+    <div class="info-strip" id="infoStrip"></div>
+  </div>
+
+  <div class="next-steps" id="nextSteps">
+    <div class="next-steps-header">03 &mdash; Next steps to deploy</div>
+    <ul class="steps-list" id="stepsList"></ul>
+  </div>
+</div>
+
+<script>
+let currentPlatform = 'modal';
+
+function selectPlatform(p, el) {
+  currentPlatform = p;
+  document.querySelectorAll('.platform-card').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  const gpuSel = document.getElementById('gpu');
+  if (p === 'replit') { gpuSel.value = 't4'; gpuSel.disabled = true; }
+  else { gpuSel.disabled = false; }
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function hl(code) {
+  return code.split('\n').map(line => {
+    if (line.trim().startsWith('#')) return '<span class="line-comment">' + esc(line) + '</span>';
+    let l = esc(line);
+    l = l.replace(/(&quot;[^&quot;]*&quot;|&#039;[^&#039;]*&#039;)/g, s => '<span class="line-str">' + s + '</span>');
+    l = l.replace(/\b(\d+\.?\d*)\b/g, s => '<span class="line-num">' + s + '</span>');
+    l = l.replace(/\b(import|from|def|return|async|await|class|if|else|for|in|with|as|True|False|None|self)\b/g, s => '<span class="line-kw">' + s + '</span>');
+    l = l.replace(/(@\w+)/g, s => '<span class="line-fn">' + s + '</span>');
+    return l;
+  }).join('\n');
+}
+
+function generate() {
+  const workload = document.getElementById('workload').value;
+  const gpu = document.getElementById('gpu').value;
+  const modelname = document.getElementById('modelname').value || 'mistralai/Mistral-7B-v0.1';
+  const memory = document.getElementById('memory').value || '16';
+  const payload = document.getElementById('payload').value || 'Hello world';
+  const gpuMap = { t4: 'T4', a10g: 'A10G', a100: 'A100', h100: 'H100' };
+  const gpuStr = gpuMap[gpu] || 'A10G';
+
+  let code, filename, info, steps;
+
+  if (currentPlatform === 'modal') {
+    filename = 'modal_gpu_job.py';
+    code = getModalCode(workload, gpuStr, modelname, memory, payload);
+    info = [{l:'platform',v:'Modal.com'},{l:'gpu',v:gpuStr},{l:'billing',v:'per-second'},{l:'deploy cmd',v:'modal deploy modal_gpu_job.py'}];
+    steps = [
+      'Sign up at <a href="https://modal.com" target="_blank">modal.com</a> — free tier includes $30/mo GPU credits',
+      'Install CLI: <code>pip install modal</code> then run <code>modal token new</code>',
+      'Save the generated code as <code>modal_gpu_job.py</code>',
+      'Deploy: <code>modal deploy modal_gpu_job.py</code> — Modal gives you a live HTTPS endpoint',
+      'Call from Lovable or Replit frontend: <code>fetch("https://YOUR-APP.modal.run/api_run", { method:"POST", body: JSON.stringify({prompt:"..."}) })</code>',
+    ];
+  } else if (currentPlatform === 'runpod') {
+    filename = 'handler.py';
+    code = getRunpodCode(modelname, payload);
+    info = [{l:'platform',v:'RunPod Serverless'},{l:'gpu',v:gpuStr},{l:'billing',v:'per-worker-second'},{l:'endpoint',v:'REST POST /run'}];
+    steps = [
+      'Sign up at <a href="https://runpod.io" target="_blank">runpod.io</a> and navigate to Serverless',
+      'Create a new endpoint — use the generated <code>handler.py</code> as your worker code',
+      'Build a Docker image: <code>docker build -t my-gpu-worker .</code> (Dockerfile included in comments)',
+      'Push to RunPod Container Registry and attach to your endpoint',
+      'Call from any app: <code>fetch("https://api.runpod.ai/v2/ENDPOINT_ID/run", { headers: { Authorization: "Bearer KEY" }, body: JSON.stringify({ input: { prompt: "..." } }) })</code>',
+    ];
+  } else {
+    filename = 'main.py';
+    code = getReplitCode(modelname, payload);
+    info = [{l:'platform',v:'Replit GPU'},{l:'gpu',v:'NVIDIA T4'},{l:'plan',v:'Core (paid)'},{l:'access',v:'localhost:5000'}];
+    steps = [
+      'Go to your Replit project and upgrade to <strong>Core</strong> plan (includes T4 GPU)',
+      'In your Repl settings, enable the GPU add-on',
+      'Paste the generated code as <code>main.py</code> and click Run',
+      'Your Replit frontend can now call the local API: <code>fetch("/run", { method:"POST", ... })</code>',
+      'Everything stays inside Replit — no external tab needed',
+    ];
+  }
+
+  document.getElementById('outputFilename').textContent = filename;
+  const pre = document.getElementById('codeOutput');
+  pre.innerHTML = hl(code);
+  pre.dataset.raw = code;
+  document.getElementById('infoStrip').innerHTML = info.map(i => '<div class="info-item">' + i.l + ': <span>' + i.v + '</span></div>').join('');
+  document.getElementById('stepsList').innerHTML = steps.map(s => '<li>' + s + '</li>').join('');
+  document.getElementById('outputPanel').classList.add('visible');
+  document.getElementById('nextSteps').classList.add('visible');
+  document.getElementById('outputPanel').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function getModalCode(workload, gpu, model, memory, prompt) {
+  const mem = parseInt(memory) * 1024;
+  if (workload === 'diffusion') {
+    return `import modal\n\napp = modal.App("stable-diffusion")\n\nimage = (\n    modal.Image.debian_slim()\n    .pip_install("diffusers", "torch", "transformers", "accelerate", "Pillow")\n)\n\n@app.function(gpu="${gpu}", image=image, timeout=600)\ndef generate_image(prompt: str) -> bytes:\n    from diffusers import StableDiffusionPipeline\n    import torch, io\n\n    pipe = StableDiffusionPipeline.from_pretrained(\n        "${model}",\n        torch_dtype=torch.float16,\n    ).to("cuda")\n\n    image = pipe(prompt).images[0]\n    buf = io.BytesIO()\n    image.save(buf, format="PNG")\n    return buf.getvalue()\n\n@app.function(gpu="${gpu}", image=image)\n@modal.web_endpoint(method="POST")\ndef api_run(item: dict):\n    import base64\n    prompt = item.get("prompt", "${prompt.replace(/\n/g,' ')}")\n    img_bytes = generate_image.remote(prompt)\n    return {"image_b64": base64.b64encode(img_bytes).decode()}`;
+  }
+  return `import modal\n\napp = modal.App("gpu-inference")\n\n# Container image with all dependencies\nimage = (\n    modal.Image.debian_slim()\n    .pip_install("transformers", "torch", "accelerate", "fastapi")\n)\n\n@app.function(\n    gpu="${gpu}",\n    image=image,\n    memory=${mem},\n    timeout=300,\n)\ndef run_inference(prompt: str) -> str:\n    from transformers import pipeline\n    import torch\n\n    pipe = pipeline(\n        "text-generation",\n        model="${model}",\n        torch_dtype=torch.float16,\n        device_map="auto",\n    )\n    result = pipe(prompt, max_new_tokens=256)\n    return result[0]["generated_text"]\n\n# REST endpoint — callable from Lovable, Replit, or any fetch()\n@app.function(gpu="${gpu}", image=image)\n@modal.web_endpoint(method="POST")\ndef api_run(item: dict):\n    prompt = item.get("prompt", "${prompt.replace(/\n/g,' ')}")\n    output = run_inference.remote(prompt)\n    return {"result": output}\n\nif __name__ == "__main__":\n    result = run_inference.remote("${prompt.replace(/\n/g,' ')}")\n    print(result)`;
+}
+
+function getRunpodCode(model, prompt) {
+  return `import runpod\nfrom transformers import pipeline\nimport torch\n\n# RunPod serverless handler\n# Deploy as Docker container to get a REST endpoint\n\nMODEL = None\n\ndef load_model():\n    return pipeline(\n        "text-generation",\n        model="${model}",\n        torch_dtype=torch.float16,\n        device_map="auto",\n    )\n\ndef handler(job):\n    global MODEL\n    if MODEL is None:\n        MODEL = load_model()\n\n    job_input = job["input"]\n    prompt = job_input.get("prompt", "${prompt.replace(/\n/g,' ')}")\n    max_tokens = job_input.get("max_tokens", 256)\n\n    result = MODEL(prompt, max_new_tokens=max_tokens)\n    return {"result": result[0]["generated_text"]}\n\nrunpod.serverless.start({"handler": handler})\n\n# --- Dockerfile (create alongside this file) ---\n# FROM runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel\n# RUN pip install runpod transformers accelerate\n# COPY handler.py .\n# CMD ["python", "handler.py"]\n# -----------------------------------------------\n#\n# Call from your app (JS):\n# const res = await fetch("https://api.runpod.ai/v2/YOUR_ENDPOINT/run", {\n#   method: "POST",\n#   headers: { "Authorization": "Bearer YOUR_API_KEY",\n#              "Content-Type": "application/json" },\n#   body: JSON.stringify({ input: { prompt: "your prompt here" } })\n# })\n# const data = await res.json()\n# console.log(data.output.result)`;
+}
+
+function getReplitCode(model, prompt) {
+  return `# Replit GPU Worker\n# Enable GPU in Repl settings (Core plan required)\n# Run this, then call http://localhost:5000/run from your frontend\n\nfrom flask import Flask, request, jsonify\nfrom transformers import pipeline\nimport torch\n\napp = Flask(__name__)\nMODEL = None\n\ndef load_model():\n    print(f"CUDA available: {torch.cuda.is_available()}")\n    print(f"Loading ${model}...")\n    return pipeline(\n        "text-generation",\n        model="${model}",\n        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,\n        device_map="auto",\n    )\n\n@app.route("/run", methods=["POST"])\ndef run_job():\n    global MODEL\n    if MODEL is None:\n        MODEL = load_model()\n    data = request.get_json()\n    prompt = data.get("prompt", "${prompt.replace(/\n/g,' ')}")\n    max_tokens = data.get("max_tokens", 256)\n    result = MODEL(prompt, max_new_tokens=max_tokens)\n    return jsonify({"result": result[0]["generated_text"]})\n\n@app.route("/health")\ndef health():\n    return jsonify({\n        "status": "ok",\n        "cuda": torch.cuda.is_available(),\n        "device": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"\n    })\n\nif __name__ == "__main__":\n    # Your Replit frontend calls this endpoint:\n    # fetch("http://localhost:5000/run", {\n    #   method: "POST",\n    #   headers: { "Content-Type": "application/json" },\n    #   body: JSON.stringify({ prompt: "your prompt here" })\n    # })\n    app.run(host="0.0.0.0", port=5000)`;
+}
+
+function copyCode() {
+  const raw = document.getElementById('codeOutput').dataset.raw;
+  navigator.clipboard.writeText(raw).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.classList.add('copied');
+    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied';
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy';
+    }, 2000);
+  });
+}
+</script>
+</body>
+</html>
