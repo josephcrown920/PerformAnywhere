@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { api } from "@/lib/api";
 import { getClientId } from "@/lib/client-id";
 import { StatusPill } from "./Projects";
-import { ArrowLeft, Download, RotateCw, CheckCircle2, Clock, Cpu, HardDrive, Sparkles } from "lucide-react";
+import { ArrowLeft, Download, RotateCw, CheckCircle2, Clock, Cpu, HardDrive, Sparkles, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import AppLayout from "@/components/AppLayout";
 
@@ -343,14 +343,30 @@ export default function ProjectDetail({ id }: { id: string }) {
             {/* Actions */}
             <div className="mt-4 flex flex-wrap gap-3">
               {project.status === "succeeded" && videoUrl && (
-                <a
-                  href={videoUrl}
-                  download={`${project.title}.mp4`}
-                  className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition hover:opacity-90"
-                  style={{ background: "oklch(0.65 0.30 330)" }}
-                >
-                  <Download className="h-4 w-4" /> Download MP4
-                </a>
+                <>
+                  <a
+                    href={videoUrl}
+                    download={`${project.title}.mp4`}
+                    className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition hover:opacity-90"
+                    style={{ background: "oklch(0.65 0.30 330)" }}
+                  >
+                    <Download className="h-4 w-4" /> Download MP4
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+                      const shareUrl = `${window.location.origin}${base}/r/${clientId}/${project.id}`;
+                      navigator.clipboard.writeText(shareUrl)
+                        .then(() => toast.success("Share link copied!", { description: "Anyone with this link can watch the render." }))
+                        .catch(() => toast.error("Could not copy — try manually: " + shareUrl));
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-80"
+                    style={{ background: "oklch(0.58 0.26 290 / 0.25)", border: "1px solid oklch(0.58 0.26 290 / 0.5)" }}
+                  >
+                    <Share2 className="h-4 w-4" /> Share link
+                  </button>
+                </>
               )}
 
               {(project.status === "failed" || project.status === "succeeded") && (

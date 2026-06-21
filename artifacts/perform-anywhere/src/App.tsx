@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import Landing from "@/pages/Landing";
 import Projects from "@/pages/Projects";
 import ProjectDetail from "@/pages/ProjectDetail";
+import PublicRender from "@/pages/PublicRender";
 import Studio from "@/pages/Studio";
 import Orchestrate from "@/pages/Orchestrate";
 import Account from "@/pages/Account";
@@ -17,6 +18,10 @@ function Router() {
       <Route path="/projects" component={Projects} />
       <Route path="/projects/:id">
         {(params) => <ProjectDetail id={params.id} />}
+      </Route>
+      {/* Public share links — no auth required */}
+      <Route path="/r/:clientId/:projectId">
+        {(params) => <PublicRender clientId={params.clientId} projectId={params.projectId} />}
       </Route>
       <Route path="/studio" component={Studio} />
       <Route path="/orchestrate" component={Orchestrate} />
