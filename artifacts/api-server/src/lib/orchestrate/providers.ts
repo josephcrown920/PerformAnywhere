@@ -442,6 +442,121 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
     if (!url) throw new Error(`runway: no url in response: ${JSON.stringify(j).slice(0, 300)}`);
     return { provider: "runway", model, output_url: url, raw: j };
   },
+
+  // Sora via OpenAI Video API
+  sora: async ({ prompt, options = {} }) => {
+    const key = env("OPENAI_API_KEY");
+    if (!key) throw new ProviderUnconfigured("sora");
+    const model = "sora-1.0-turbo";
+    const createRes = await fetch("https://api.openai.com/v1/video/generations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        prompt: String(prompt).slice(0, 2000),
+        n: 1,
+        size: options.size ?? "1280x720",
+        duration: options.duration ?? 5,
+        ...(options.imageUrl ? { image: options.imageUrl } : {}),
+      }),
+    });
+    if (!createRes.ok) throw new Error(`sora submit ${createRes.status}: ${await createRes.text()}`);
+    const created = await createRes.json() as { id?: string; data?: { id: string }[] };
+    const genId = created.id ?? created.data?.[0]?.id;
+    if (!genId) throw new Error("sora: no generation id returned");
+
+    // Poll up to 10 min
+    for (let i = 0; i < 120; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      const poll = await fetch(`https://api.openai.com/v1/video/generations/${genId}`, {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      if (!poll.ok) continue;
+      const pj = await poll.json() as { status?: string; data?: { url?: string }[]; url?: string };
+      if (pj.status === "succeeded" || pj.status === "completed") {
+        const url = pj.url ?? pj.data?.[0]?.url;
+        if (!url) throw new Error("sora: succeeded but no video url");
+        return { provider: "sora", model, output_url: url, raw: pj };
+      }
+      if (pj.status === "failed") throw new Error("sora: generation failed");
+    }
+    throw new Error("sora: timeout after 10 minutes");
+  },
+
+  // Veo 2 via Google Gemini API
+  veo: async ({ prompt, options = {} }) => {
+    const key = env("GEMINI_API_KEY");
+    if (!key) throw new ProviderUnconfigured("veo");
+    const model = "veo-2.0-generate-001";
+    const createRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:predictLongRunning?key=${key}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instances: [{ prompt: String(prompt).slice(0, 2000) }],
+          parameters: {
+            aspectRatio: options.aspectRatio ?? "16:9",
+            sampleCount: 1,
+            durationSeconds: options.duration ?? 5,
+            ...(options.imageUrl ? { image: { bytesBase64Encoded: options.imageUrl } } : {}),
+          },
+        }),
+      }
+    );
+    if (!createRes.ok) throw new Error(`veo submit ${createRes.status}: ${await createRes.text()}`);
+    const op = await createRes.json() as { name?: string };
+    if (!op.name) throw new Error("veo: no operation name returned");
+
+    // Poll up to 10 min
+    for (let i = 0; i < 120; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      const poll = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/${op.name}?key=${key}`
+      );
+      if (!poll.ok) continue;
+      const pj = await poll.json() as {
+        done?: boolean;
+        response?: { videos?: { uri?: string; video?: { uri?: string } }[] };
+        error?: { message?: string };
+      };
+      if (pj.error) throw new Error(`veo: ${pj.error.message}`);
+      if (pj.done) {
+        const url = pj.response?.videos?.[0]?.uri ?? pj.response?.videos?.[0]?.video?.uri;
+        if (!url) throw new Error("veo: done but no video url");
+        return { provider: "veo", model, output_url: url, raw: pj };
+      }
+    }
+    throw new Error("veo: timeout after 10 minutes");
+  },
+
+  // HuggingFace free video generation
+  huggingface: async ({ prompt, options = {} }) => {
+    const key = env("HUGGINGFACE_API_KEY");
+    if (!key) throw new ProviderUnconfigured("huggingface");
+    const hfModel = (options.hfModel as string) ?? "ali-vilab/i2vgen-xl";
+    const body: Record<string, unknown> = { inputs: String(prompt).slice(0, 500) };
+    if (options.imageUrl) body.image = options.imageUrl;
+
+    const res = await fetch(`https://api-inference.huggingface.co/models/${hfModel}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "x-wait-for-model": "true" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`huggingface ${res.status}: ${await res.text()}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length < 1000) throw new Error(`huggingface: response too small (${buf.length} bytes) — model may be loading`);
+
+    // Upload to Supabase storage so we have a real URL
+    const path = `hf-video/${Date.now()}.mp4`;
+    const { createAnonClient } = await import("../supabase.js");
+    const sb = createAnonClient();
+    const { error: upErr } = await sb.storage.from("renders").upload(path, buf, { contentType: "video/mp4", upsert: true });
+    if (upErr) throw new Error(`huggingface: storage upload failed: ${upErr.message}`);
+    const { data: signed } = await sb.storage.from("renders").createSignedUrl(path, 3600);
+    if (!signed?.signedUrl) throw new Error("huggingface: could not sign url");
+    return { provider: "huggingface", model: hfModel, output_url: signed.signedUrl };
+  },
 };
 
 // ──────────────── AUDIO ────────────────

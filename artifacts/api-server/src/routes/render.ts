@@ -145,16 +145,16 @@ async function startRenderJob(opts: {
 
     const { videoAdapters } = await import("../lib/orchestrate/providers.js");
 
-    // Fallback chain: Kling → WAN 2.1 (via Replicate) — Fal/Hailuo excluded
+    // Fallback chain: Kling → WAN → Veo 2 → Sora → HuggingFace (Fal excluded)
     const primaryProvider = preferredProvider ?? "kling";
     const providerOrder = [
       primaryProvider,
-      ...["kling", "wan"].filter((p) => p !== primaryProvider),
+      ...["kling", "wan", "veo", "sora", "huggingface"].filter((p) => p !== primaryProvider),
     ];
 
     const modelForProvider = (p: string) => {
       if (p === "kling") return chosenModel.startsWith("kling") ? chosenModel : "kling-v1-6-std";
-      return "wan"; // model string unused by wan adapter, it picks automatically
+      return p;
     };
 
     const options: Record<string, unknown> = { duration: 5 };

@@ -17,8 +17,11 @@ export function estimateCredits(modality: Modality, options: Record<string, unkn
 }
 
 export const CATALOG_DEFAULT_FALLBACKS: Record<Modality, string[]> = {
-  text:  ["lovable", "gemini", "groq", "mistral", "pollinations", "huggingface", "openai", "cohere"],
+  text:  ["groq", "gemini", "cohere", "lovable", "mistral", "pollinations", "huggingface", "openai"],
   image: ["lovable", "pollinations", "huggingface", "fal", "replicate", "runware"],
-  video: ["kling", "fal", "replicate"],
+  video: ["kling", "wan", "veo", "sora", "huggingface", "replicate", "fal"],
   audio: ["elevenlabs", "replicate"],
 };
+
+// Providers that cost 0 credits (free-tier / key-based, no billing)
+export const FREE_PROVIDERS = new Set(["groq", "gemini", "cohere", "huggingface", "pollinations", "veo"]);

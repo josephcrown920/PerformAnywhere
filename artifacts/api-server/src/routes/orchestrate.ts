@@ -2,7 +2,7 @@ import { Router } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createAnonClient, assertClientId } from "../lib/supabase.js";
 import { runOrchestrated } from "../lib/orchestrate/run.js";
-import { estimateCredits, type Modality } from "../lib/orchestrate/catalog.js";
+import { estimateCredits, FREE_PROVIDERS, type Modality } from "../lib/orchestrate/catalog.js";
 
 const router = Router();
 
@@ -60,7 +60,9 @@ router.post("/run", async (req, res) => {
   if (!prompt?.trim()) return res.status(400).json({ error: "prompt required" });
 
   const sb = createAnonClient();
-  const credits = estimateCredits(modality, options);
+  const primaryProvider = modelId.split("/")[0];
+  const isFree = FREE_PROVIDERS.has(primaryProvider);
+  const credits = isFree ? 0 : estimateCredits(modality, options);
 
   // Create pending generation row
   const { data: gen, error: gErr } = await sb
@@ -69,7 +71,7 @@ router.post("/run", async (req, res) => {
       client_id: clientId,
       modality,
       model: modelId,
-      provider: modelId.split("/")[0],
+      provider: primaryProvider,
       prompt,
       options,
       credits_used: credits,
@@ -79,17 +81,19 @@ router.post("/run", async (req, res) => {
     .single();
   if (gErr || !gen) return res.status(500).json({ error: gErr?.message ?? "DB error" });
 
-  // Try to spend credits via RPC
-  const { error: spendErr } = await sb.rpc("spend_credits", {
-    _client_id: clientId,
-    _amount: credits,
-    _reason: "generation",
-    _description: `${modality}/${modelId}`,
-    _generation_id: gen.id,
-  });
-  if (spendErr) {
-    await sb.from("generations").update({ status: "failed", error_message: "insufficient_credits" }).eq("id", gen.id);
-    return res.status(402).json({ error: "insufficient_credits" });
+  // Only spend credits for paid providers
+  if (!isFree && credits > 0) {
+    const { error: spendErr } = await sb.rpc("spend_credits", {
+      _client_id: clientId,
+      _amount: credits,
+      _reason: "generation",
+      _description: `${modality}/${modelId}`,
+      _generation_id: gen.id,
+    });
+    if (spendErr) {
+      await sb.from("generations").update({ status: "failed", error_message: "insufficient_credits" }).eq("id", gen.id);
+      return res.status(402).json({ error: "insufficient_credits" });
+    }
   }
 
   try {
