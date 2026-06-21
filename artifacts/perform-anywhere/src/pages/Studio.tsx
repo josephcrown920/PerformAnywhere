@@ -70,15 +70,20 @@ export default function Studio() {
     try {
       const clientId = getClientId();
 
-      const { data: project, error: pErr } = await supabase
+      // Try inserting with selected_model; fall back if the column doesn't exist yet (run migration 001)
+      const baseInsert = {
+        client_id: clientId, title, status: "draft",
+        scene_prompt: scenePrompt || null,
+        style_prompt: stylePrompt || null,
+        enhanced_prompt: customPrompt || enhanced || null,
+      };
+      let { data: project, error: pErr } = await supabase
         .from("projects")
-        .insert({
-          client_id: clientId, title, status: "draft",
-          scene_prompt: scenePrompt || null,
-          style_prompt: stylePrompt || null,
-          enhanced_prompt: customPrompt || enhanced || null,
-        })
+        .insert({ ...baseInsert, selected_model: selectedModel })
         .select("id").single();
+      if (pErr?.message?.includes("selected_model")) {
+        ({ data: project, error: pErr } = await supabase.from("projects").insert(baseInsert).select("id").single());
+      }
       if (pErr || !project) throw new Error(pErr?.message ?? "Could not create project");
 
       for (const kind of ["performance", "identity", "outfit", "scene"] as AssetKind[]) {

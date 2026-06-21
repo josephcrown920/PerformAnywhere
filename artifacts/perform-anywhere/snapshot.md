@@ -1,6 +1,6 @@
-# UI Snapshot — Perform Anywhere
+# UI Snapshot — Aurora Synthetic Intelligence (Studio)
 
-Visual and functional snapshot of the app as of the Replit migration (June 2026).
+Visual and functional snapshot as of June 2026 (post-Aurora rebrand).
 Update this file whenever a major UI or routing change is made.
 
 ---
@@ -9,167 +9,146 @@ Update this file whenever a major UI or routing change is made.
 
 | Item | Value |
 |---|---|
+| Brand name | **Aurora Synthetic Intelligence** |
 | Theme | Dark only (`color-scheme: dark`) |
-| Background | `oklch(0.16 0.005 60)` — deep charcoal |
-| Primary accent | `oklch(0.62 0.19 32)` — ember/terracotta |
-| Display font | Fraunces (serif, optical sizing) |
+| Background | `oklch(0.10 0.04 290)` — deep space purple |
+| Primary accent | `oklch(0.58 0.26 290)` — violet |
+| Hot-pink accent | `oklch(0.65 0.30 330)` — CTAs, badges, "shoot." hero word |
 | Body font | Inter |
-| Border style | Subtle `border-border/30–50` throughout |
-| Nav | Sticky header, icon+label (label hidden on mobile) |
+| Display/heading | Bold `font-bold tracking-tight` (no serif) |
+| Border style | `oklch(0.28 0.07 285 / 0.4–0.6)` throughout |
+| Corner radius | `rounded-xl` (12 px) cards, `rounded-2xl` (16 px) large panels |
+| Nav | Sticky header, glass blur, icon+label, active pill with purple tint |
+| Logo | `/aurora-logo.png` — 32px, left of wordmark |
 
 ---
 
 ## `/` — Landing
 
-**Hero**
-- Eyebrow pill: amber dot + "MOTION · IDENTITY · SCENE" uppercase
-- H1: "Direct yourself / *in any world.*" — italic primary on second line
-- Subtext: 38-char max, `text-lg`
-- CTAs: Primary ("Start a project →") + ghost ("See the pipeline")
-- Right col: 3 stacked/rotated film-card decoratives (hidden on mobile)
-- Background: faint grid pattern (`linear-gradient`, 4% opacity)
-- `.grain` texture overlay
-
-**How it works (4 steps)**
-- Card grid `md:grid-cols-4`, `gap-px` (border-collapse effect)
-- Each card: icon + step number + title + body
-
-**Inputs (5 items)**
-- 2-col: left = headline + description; right = numbered list with file format hints
-
-**CTA section**
-- Centred, `.grain`, Clapperboard icon, display headline, primary button
-
-**Footer**
-- `text-xs`, icon + name left, tagline right
+- Unchanged from original Perform Anywhere design (hero + how-it-works + CTA)
+- Footer still says "Perform Anywhere" (future: update to Aurora)
 
 ---
 
-## `/projects` — Projects Library
+## `/projects` — Library (Generations)
+
+**Header row**
+- Eyebrow label: "GENERATIONS" in hot pink
+- H1: "Your library"
+- Top-right: "+ New render" hot-pink button
 
 **Empty state**
-- Centred `Film` icon (40px, `strokeWidth=1`, 30% opacity)
-- `font-display text-2xl` "No takes yet"
-- CTA button
+- Centred icon box (`oklch(0.58 0.26 290 / 0.15)` bg, `Film` icon)
+- "No generations yet" + descriptor copy
+- Pink CTA button
 
 **Populated grid**
-- `sm:grid-cols-2 lg:grid-cols-3`, `gap-5`
-- Each card:
-  - Thumbnail: `aspect-video`, `grain` gradient, `Film` icon placeholder
-  - Running overlay: 50% dark bg + spinning Loader2
-  - Succeeded: `CheckCircle2` badge bottom-right
-  - Info: title (display font, hover → primary), `StatusPill`, date + provider
+- `sm:grid-cols-2 lg:grid-cols-3`, `gap-4`
+- Each card (`rounded-2xl`, hover `scale-[1.02]`):
+  - **Thumbnail** (`aspect-video`): looping `<video autoPlay muted loop>` for succeeded; spinner + "Rendering…" for running; XCircle for failed
+  - **Status badge** (top-left, glass overlay): `StatusPill`
+  - **Provider badge** (top-right, glass overlay): capitalized provider name
+  - **Info strip** (bottom): title (hover → `text-purple-300`), date, error snippet if failed
 
 ---
 
-## `/studio` — Wizard
+## `/studio` — Wizard (3 steps)
+
+**Header**
+- H1: "Direct your <hot-pink>shoot.</hot-pink>"
+- Sub: "Drop references → write direction → generate. That's it."
 
 **Step bar**
-- Inline pill buttons: `1 Assets › 2 Direction › 3 Review`
-- Active = `bg-primary text-primary-foreground`
-- Completed = muted, clickable; future = 40% opacity, disabled
+- Pill buttons with `›` separators; active = purple bg + hot-pink step dot; completed = checkmark
 
 **Step 1 — Assets**
-- Project title input (max-w-sm)
-- 2×2 Dropzone grid
-  - Each: label + hint + dashed upload zone
-  - Preview replaces zone when file staged
+- Project title input (`rounded-xl`, purple-tinted bg)
+- 2×2 `Dropzone` grid:
+  - Hot-pink badge (01–04)
+  - Upload zone: dashed border, Upload icon, "Click or drag to upload"
+  - Video preview: `<video autoPlay muted playsInline loop>` on blob URL (fixes blank preview)
+  - Image preview: `<img>`
 
 **Step 2 — Direction**
-- 8 style chip pills (click-to-append)
-- 2-col textarea (scene notes / visual style), 5 rows each
-- "Enhance with AI" button (sparkles icon)
-- Enhanced prompt card: `border-primary/30 bg-primary/5`
+- **Model picker** (top): 3-card grid — Kling v1.6 (Fast, purple badge), Kling v1.6 Pro (Quality, pink badge), Hailuo (Alt, dark badge). Active card: purple border + animated pink pulse dot.
+- **Direct prompt box**: free-text `<textarea>` with note "(optional — overrides AI enhancement)"
+- **Style chips**: 8 preset pills (click-to-append)
+- **2-col textarea grid**: Scene notes + Visual style
+- **"Enhance with AI" button**: only visible when direct prompt is empty; sparkles icon
+- **AI-enhanced prompt card**: purple-tinted box, shown after enhancement
 
 **Step 3 — Review**
-- `ReviewRow` table in `bg-card` rounded border
-- Two-column: label (28px fixed) + value
-
-**Nav**
-- Bottom: Back/Cancel (left), Continue/Submit (right)
-- Submit shows spinner when in-flight
+- `ReviewRow` table in purple-tinted rounded panel
+- "Model" row highlighted in hot pink
+- Submit: pink "Render performance ✦" button
 
 ---
 
 ## `/projects/:id` — Project Detail
 
 **Header**
-- Back link, title, status pill, date, provider, Delete button (destructive hover)
+- Back link to "/projects", title, status pill, provider, date, Delete button
 
-**2-col layout** (lg: `[1fr_1.4fr]`)
+**Progress indicator** (visible only when status = queued or running)
+- 5-step pipeline visual: Upload → Queue → AI Render → Download → Done
+  - Each step: icon circle (green=done, purple=active+pulse, dark=pending) + label
+  - Connector line between steps (green when done, dim when pending)
+- Animated progress bar (gradient purple→pink) driven by elapsed vs. model ETA:
+  - Kling v1.6 Std: 150 s
+  - Kling v1.6 Pro: 300 s
+  - Hailuo: 240 s
+- Elapsed / remaining timestamps updated every second
+- Model badge (rounded pill, purple-tinted)
 
-Left:
-- 2×2 input thumbnails (video/image previews or "—" placeholders)
-- Enhanced prompt block (if set)
+**2-col layout** (`lg:[1fr_1.5fr]`)
 
-Right:
-- Output frame (`aspect-video`):
-  - **Queued/Running**: dark bg, spin animation, "Rendering…" display text, sub-note
-  - **Succeeded**: `<video>` player
-  - **Failed**: `text-destructive` "Render failed" + error message
-- Actions (below frame):
-  - Download MP4 (primary button, succeeded only)
-  - Retry provider buttons (border buttons, failed/succeeded)
+Left — Reference inputs:
+- 2×2 asset thumbnails (rounded-xl, dark bg)
+- Performance: `<video autoPlay loop>`, others: `<img>`
+- Prompt block (if set) in dark rounded panel
+
+Right — Output:
+- Queued/Running: spinner + "Rendering…" / "In queue" + "You can leave this page"
+- Succeeded: `<video controls>`
+- Failed: "Render failed" + error message
+
+Actions (below output):
+- "Download MP4" — hot-pink button (succeeded only)
+- "Try another model:" — border buttons for kling / hailuo / fal
 
 ---
 
 ## `/orchestrate` — AI Router
 
-**Header row**
-- Left: eyebrow "AI ROUTER", h1 "Orchestrate", subtitle
-- Right: wallet card (`bg-card border`, `font-display text-4xl` balance, email input, top-up buttons)
-
-**Modality tabs**
-- Uppercase, underline active (border-b-2 primary), `overflow-x-auto`
-
-**Controls**
-- Model select (full width or half grid)
-- Duration number input (video only, half grid)
-- Prompt textarea (`font-mono`, 4 rows)
-- Cost row (left) + Generate button (right)
-
-**Result card**
-- Meta line: provider · model · credits · duration
-- Output: text paragraph / `<img>` / `<video>` / `<audio>`
-- Fallback log: `<details>` collapsible
-
-**History table**
-- Divided rows in `bg-card` rounded border
-- Columns: modality badge | provider | prompt (truncated) | status | credits | chevron
+Unchanged from pre-rebrand. Shows wallet, modality tabs, model selector, prompt, result, history.
 
 ---
 
 ## `/account` — Settings
 
-**Session card**
-- Session UUID in `font-mono text-xs` inside `bg-background` inset box
-- Reset button: border, destructive hover
-
-**Provider keys card**
-- Two sections: Active (emerald check) / Not configured (muted alert icon)
-- Row: label + env-key name left, status right
-
-**Footer hint**
-- `text-xs` with inline `<code>` tags for key names
+- "Anonymous session" card + "Provider keys" card (Active / Not configured sections)
+- Footer hint: minimum required env vars
+- ElevenLabs (audio) shows as "Not configured" until `ELEVENLABS_API_KEY` is set
 
 ---
 
-## Smoke test results (migration baseline)
+## Smoke test results (June 2026 — post-rebrand)
 
 | Test | Result |
 |---|---|
-| `GET /api/healthz` | `{"status":"ok"}` ✓ |
-| `GET /api/render/providers` | Returns 11-item array ✓ |
-| `POST /api/orchestrate/wallet` (valid UUID) | `{"balance":0,...}` ✓ |
-| `POST /api/render/poll` (unknown project) | `{"error":"not_found"}` ✓ |
-| Frontend load (`/`) | Renders, no runtime errors ✓ |
-| Frontend nav (all pages) | Routes functional, Supabase connected ✓ |
-| Supabase project | `dgtnkkarlwufxawfaybb.supabase.co` — existing data intact ✓ |
+| Aurora logo in nav | ✓ `/aurora-logo.png` loaded |
+| Video autoPlay on upload | ✓ blob URL plays immediately |
+| Model picker (Step 2) | ✓ 3 cards, selection persists to Review |
+| Direct prompt override | ✓ sent as `enhanced_prompt` |
+| Library — video thumbnails | ✓ lazy signed-URL fetch, loops on hover |
+| Progress bar — pipeline steps | ✓ pipeline renders during queued/running |
+| Render start with model param | ✓ `POST /render/start` accepts `model` field |
 
 ---
 
-## Known gaps (to configure)
+## Known gaps
 
-- **No provider keys set** → renders will fail until `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` are added to Secrets
-- **Paystack** not configured → top-up button initiates but fails server-side
-- **Lovable AI Gateway** / Groq / Gemini keys not set → prompt enhancement falls back gracefully
+- **ElevenLabs** not configured → audio generation unavailable (Settings shows this)
+- **Landing page** still says "Perform Anywhere" in footer — cosmetic, not urgent
+- **Paystack** not configured → credit top-up fails server-side
+- `selected_model` column must be added to Supabase `projects` table (migration in replit.md)

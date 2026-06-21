@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { api } from "@/lib/api";
 import { getClientId } from "@/lib/client-id";
 import { StatusPill } from "./Projects";
-import { ArrowLeft, Download, RotateCw } from "lucide-react";
+import { ArrowLeft, Download, RotateCw, CheckCircle2, Clock, Cpu, HardDrive, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import AppLayout from "@/components/AppLayout";
 
@@ -14,12 +14,137 @@ type ProjectRow = {
   title: string;
   status: string;
   provider: string;
+  selected_model: string | null;
   scene_prompt: string | null;
   style_prompt: string | null;
   enhanced_prompt: string | null;
   error_message: string | null;
   created_at: string;
+  updated_at: string;
 };
+
+const MODEL_ETA_SEC: Record<string, number> = {
+  "kling-v1-6-std": 150,
+  "kling-v1-6-pro": 300,
+  "hailuo":         240,
+  "fal":            180,
+};
+
+const PIPELINE_STEPS = [
+  { key: "upload",   label: "Upload",    Icon: HardDrive },
+  { key: "queue",    label: "Queue",     Icon: Clock },
+  { key: "render",   label: "AI Render", Icon: Cpu },
+  { key: "download", label: "Download",  Icon: Download },
+  { key: "done",     label: "Done",      Icon: Sparkles },
+];
+
+function statusToStep(status: string): number {
+  switch (status) {
+    case "draft":     return 0;
+    case "queued":    return 1;
+    case "running":   return 2;
+    case "succeeded": return 4;
+    case "failed":    return -1;
+    default:          return 0;
+  }
+}
+
+function RenderProgress({ project }: { project: ProjectRow }) {
+  const [elapsed, setElapsed] = useState(0);
+  const activeStep = statusToStep(project.status);
+  const modelKey = project.selected_model ?? project.provider ?? "kling-v1-6-std";
+  const etaSec = MODEL_ETA_SEC[modelKey] ?? 180;
+  const pct = Math.min(100, Math.round((elapsed / etaSec) * 100));
+
+  useEffect(() => {
+    const created = new Date(project.created_at).getTime();
+    const tick = () => setElapsed(Math.floor((Date.now() - created) / 1000));
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [project.created_at]);
+
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const remaining = Math.max(0, etaSec - elapsed);
+
+  return (
+    <div className="rounded-2xl p-5 space-y-4"
+      style={{ background: "oklch(0.14 0.05 285)", border: "1.5px solid oklch(0.28 0.07 285 / 0.5)" }}
+    >
+      {/* Pipeline steps */}
+      <div className="flex items-center gap-1">
+        {PIPELINE_STEPS.map((step, i) => {
+          const done = activeStep > i;
+          const active = activeStep === i;
+          return (
+            <div key={step.key} className="flex items-center gap-1 flex-1 min-w-0">
+              <div className="flex flex-col items-center gap-1.5 min-w-0">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-full transition-all ${
+                    active ? "animate-pulse" : ""
+                  }`}
+                  style={{
+                    background: done ? "oklch(0.50 0.18 155 / 0.25)"
+                      : active ? "oklch(0.58 0.26 290 / 0.3)"
+                      : "oklch(0.20 0.05 285)",
+                    border: done ? "1.5px solid oklch(0.50 0.18 155 / 0.6)"
+                      : active ? "1.5px solid oklch(0.58 0.26 290 / 0.8)"
+                      : "1.5px solid oklch(0.28 0.07 285 / 0.4)",
+                  }}
+                >
+                  {done
+                    ? <CheckCircle2 className="h-4 w-4" style={{ color: "oklch(0.65 0.20 155)" }} />
+                    : <step.Icon className="h-3.5 w-3.5" style={{ color: active ? "oklch(0.75 0.22 290)" : "oklch(0.45 0.08 285)" }} />
+                  }
+                </div>
+                <span className="text-[10px] font-medium text-center leading-tight" style={{ color: done || active ? "oklch(0.75 0.10 285)" : "oklch(0.45 0.08 285)" }}>
+                  {step.label}
+                </span>
+              </div>
+              {i < PIPELINE_STEPS.length - 1 && (
+                <div className="h-px flex-1 mb-5 mx-1 rounded-full transition-all"
+                  style={{ background: done ? "oklch(0.50 0.18 155 / 0.5)" : "oklch(0.28 0.07 285 / 0.4)" }}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Progress bar */}
+      {project.status !== "succeeded" && project.status !== "failed" && (
+        <div>
+          <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ background: "oklch(0.20 0.05 285)" }}>
+            <div
+              className="h-full rounded-full transition-all duration-1000"
+              style={{
+                width: `${pct}%`,
+                background: "linear-gradient(90deg, oklch(0.58 0.26 290), oklch(0.65 0.30 330))",
+              }}
+            />
+          </div>
+          <div className="mt-2 flex justify-between text-[11px]" style={{ color: "oklch(0.55 0.08 285)" }}>
+            <span>Elapsed: {fmt(elapsed)}</span>
+            <span>{pct < 100 ? `~${fmt(remaining)} remaining` : "finishing up…"}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Model badge */}
+      {modelKey && (
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-white/30">Model:</span>
+          <span
+            className="rounded-full px-2 py-0.5 text-[10px] font-bold capitalize text-white"
+            style={{ background: "oklch(0.58 0.26 290 / 0.25)", border: "1px solid oklch(0.58 0.26 290 / 0.4)" }}
+          >
+            {modelKey}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ProjectDetail({ id }: { id: string }) {
   const [, navigate] = useLocation();
@@ -59,7 +184,7 @@ export default function ProjectDetail({ id }: { id: string }) {
     })();
   }, [id, clientId]);
 
-  const { data: status } = useQuery({
+  const { data: pollStatus } = useQuery({
     queryKey: ["render-status", id, clientId],
     queryFn: () => api.pollRender({ clientId, projectId: id }),
     enabled: !!clientId,
@@ -70,12 +195,16 @@ export default function ProjectDetail({ id }: { id: string }) {
   });
 
   useEffect(() => {
-    if (status?.status === "succeeded" && status.outputPath) {
-      api.getRenderSignedUrl(status.outputPath, clientId).then((r) => setVideoUrl(r.url));
+    if (pollStatus?.status === "succeeded" && pollStatus.outputPath) {
+      api.getRenderSignedUrl(pollStatus.outputPath, clientId).then((r) => setVideoUrl(r.url));
       supabase.from("projects").select("*").eq("id", id).single()
         .then(({ data }) => setProject(data as ProjectRow));
     }
-  }, [status?.status, status?.outputPath, id]);
+    if (pollStatus?.status && project?.status !== pollStatus.status) {
+      supabase.from("projects").select("*").eq("id", id).single()
+        .then(({ data }) => { if (data) setProject(data as ProjectRow); });
+    }
+  }, [pollStatus?.status, pollStatus?.outputPath, id]);
 
   async function handleRetry(provider: string) {
     try {
@@ -96,52 +225,69 @@ export default function ProjectDetail({ id }: { id: string }) {
   if (!project) {
     return (
       <AppLayout>
-        <div className="mx-auto max-w-6xl px-6 py-12 text-muted-foreground">Loading…</div>
+        <div className="mx-auto max-w-5xl px-6 py-12 text-white/40">Loading…</div>
       </AppLayout>
     );
   }
 
+  const isActive = project.status === "running" || project.status === "queued";
+  const promptText = project.enhanced_prompt || project.scene_prompt || project.style_prompt;
+
   return (
     <AppLayout>
-      <main className="mx-auto max-w-6xl px-6 py-12">
-        <Link to="/projects" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> All projects
+      <main className="mx-auto max-w-5xl px-6 py-12">
+        <Link to="/projects" className="inline-flex items-center gap-1.5 text-sm text-white/40 hover:text-white transition">
+          <ArrowLeft className="h-4 w-4" /> Library
         </Link>
 
-        <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
+        <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="font-display text-4xl md:text-5xl">{project.title}</h1>
-            <p className="mt-2 flex items-center gap-3 text-sm text-muted-foreground">
-              <StatusPill status={project.status} /> · {project.provider} ·{" "}
-              {new Date(project.created_at).toLocaleString()}
+            <h1 className="text-4xl font-bold text-white">{project.title}</h1>
+            <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/40">
+              <StatusPill status={project.status} />
+              {project.provider && <><span>·</span><span className="capitalize">{project.provider}</span></>}
+              <span>·</span>
+              <span>{new Date(project.created_at).toLocaleString()}</span>
             </p>
           </div>
           <button
             onClick={handleDelete}
-            className="rounded border border-border px-3 py-1.5 text-sm text-muted-foreground hover:border-destructive hover:text-destructive"
+            className="rounded-xl px-4 py-2 text-sm text-white/40 transition hover:text-red-400"
+            style={{ border: "1px solid oklch(0.28 0.07 285 / 0.5)" }}
           >
             Delete
           </button>
         </div>
 
-        <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_1.4fr]">
+        {/* Progress indicator — only when active */}
+        {isActive && (
+          <div className="mt-6">
+            <RenderProgress project={project} />
+          </div>
+        )}
+
+        <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_1.5fr]">
+
+          {/* Left: inputs */}
           <aside className="space-y-6">
-            <h2 className="font-display text-xl">Inputs</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-white/30">Reference inputs</h2>
             <div className="grid grid-cols-2 gap-3">
               {(["performance", "identity", "outfit", "scene"] as const).map((kind) => {
                 const url = assetUrls[kind];
                 const hasAsset = assets.find((a) => a.kind === kind);
                 return (
-                  <div key={kind} className="rounded border border-border bg-card p-2">
-                    <p className="px-1 pb-1 text-xs uppercase tracking-widest text-muted-foreground">{kind}</p>
+                  <div key={kind} className="rounded-xl overflow-hidden"
+                    style={{ background: "oklch(0.14 0.05 285)", border: "1.5px solid oklch(0.28 0.07 285 / 0.4)" }}
+                  >
+                    <p className="px-2.5 pt-2 pb-1 text-[10px] uppercase tracking-widest text-white/30">{kind}</p>
                     {url ? (
                       kind === "performance" ? (
-                        <video src={url} className="aspect-video w-full rounded object-cover" muted playsInline controls />
+                        <video src={url} className="aspect-video w-full object-cover" muted playsInline autoPlay loop />
                       ) : (
-                        <img src={url} alt={kind} className="aspect-video w-full rounded object-cover" />
+                        <img src={url} alt={kind} className="aspect-video w-full object-cover" />
                       )
                     ) : (
-                      <div className="flex aspect-video items-center justify-center rounded bg-muted text-xs text-muted-foreground">
+                      <div className="flex aspect-video items-center justify-center text-xs text-white/20">
                         {hasAsset ? "…" : "—"}
                       </div>
                     )}
@@ -150,64 +296,76 @@ export default function ProjectDetail({ id }: { id: string }) {
               })}
             </div>
 
-            {project.enhanced_prompt && (
+            {promptText && (
               <div>
-                <h2 className="font-display text-xl">Prompt</h2>
-                <p className="mt-2 whitespace-pre-wrap rounded border border-border bg-card p-4 text-sm">
-                  {project.enhanced_prompt}
+                <h2 className="text-sm font-semibold uppercase tracking-widest text-white/30 mb-2">Prompt</h2>
+                <p className="whitespace-pre-wrap rounded-xl p-4 text-sm text-white/70 leading-relaxed"
+                  style={{ background: "oklch(0.14 0.05 285)", border: "1.5px solid oklch(0.28 0.07 285 / 0.4)" }}
+                >
+                  {promptText}
                 </p>
               </div>
             )}
           </aside>
 
+          {/* Right: output */}
           <section>
-            <h2 className="font-display text-xl">Output</h2>
-            <div className="mt-3 overflow-hidden rounded border border-border bg-card">
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-white/30 mb-3">Output</h2>
+
+            <div className="overflow-hidden rounded-2xl"
+              style={{ background: "oklch(0.12 0.04 285)", border: "1.5px solid oklch(0.28 0.07 285 / 0.4)" }}
+            >
               {project.status === "succeeded" && videoUrl ? (
                 <video src={videoUrl} controls className="aspect-video w-full" />
               ) : project.status === "failed" ? (
-                <div className="grain flex aspect-video flex-col items-center justify-center p-6 text-center">
-                  <p className="font-display text-2xl text-destructive">Render failed</p>
-                  <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                    {project.error_message || status?.error || "Unknown error"}
+                <div className="flex aspect-video flex-col items-center justify-center gap-3 p-8 text-center">
+                  <p className="text-2xl font-bold text-red-400">Render failed</p>
+                  <p className="max-w-sm text-sm text-white/40">
+                    {project.error_message || pollStatus?.error || "An unknown error occurred."}
                   </p>
                 </div>
               ) : (
-                <div className="grain flex aspect-video flex-col items-center justify-center">
-                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                  <p className="mt-4 font-display text-xl">
-                    {status?.status === "running" ? "Rendering…" : "Queued"}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Typically 1–6 minutes. You can leave this page.
-                  </p>
+                <div className="flex aspect-video flex-col items-center justify-center gap-4">
+                  <div
+                    className="h-10 w-10 rounded-full border-2 animate-spin"
+                    style={{ borderColor: "oklch(0.58 0.26 290 / 0.3)", borderTopColor: "oklch(0.65 0.30 330)" }}
+                  />
+                  <div className="text-center">
+                    <p className="text-xl font-bold text-white">
+                      {project.status === "running" ? "Rendering…" : "In queue"}
+                    </p>
+                    <p className="mt-1 text-sm text-white/35">You can leave this page safely.</p>
+                  </div>
                 </div>
               )}
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            {/* Actions */}
+            <div className="mt-4 flex flex-wrap gap-3">
               {project.status === "succeeded" && videoUrl && (
                 <a
                   href={videoUrl}
                   download={`${project.title}.mp4`}
-                  className="inline-flex items-center gap-2 rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                  className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition hover:opacity-90"
+                  style={{ background: "oklch(0.65 0.30 330)" }}
                 >
                   <Download className="h-4 w-4" /> Download MP4
                 </a>
               )}
+
               {(project.status === "failed" || project.status === "succeeded") && (
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Try another provider:</span>
-                  {(["runway", "kling", "hailuo"] as const)
+                  <span className="text-xs text-white/30">Try another model:</span>
+                  {(["kling", "hailuo", "fal"] as const)
                     .filter((p) => p !== project.provider)
                     .map((p) => (
                       <button
                         key={p}
                         onClick={() => handleRetry(p)}
-                        className="inline-flex items-center gap-1 rounded border border-border px-3 py-1 text-xs hover:border-primary"
+                        className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium text-white/60 transition hover:text-white"
+                        style={{ border: "1px solid oklch(0.28 0.07 285 / 0.5)" }}
                       >
-                        <RotateCw className="h-3 w-3" />
-                        {p}
+                        <RotateCw className="h-3 w-3" /> {p}
                       </button>
                     ))}
                 </div>
