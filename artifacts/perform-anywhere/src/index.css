@@ -5,7 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 
   --radius-sm: calc(var(--radius) - 4px);
@@ -31,46 +31,48 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-cream: var(--cream);
-  --color-ember: var(--ember);
+  --color-pink: var(--pink);
 }
 
 :root {
-  --radius: 0.25rem;
+  --radius: 0.75rem;
 
-  --background: oklch(0.16 0.005 60);
-  --foreground: oklch(0.94 0.025 80);
-  --cream: oklch(0.94 0.025 80);
-  --ember: oklch(0.62 0.19 32);
+  /* Aurora deep purple-navy */
+  --background: oklch(0.10 0.04 290);
+  --foreground: oklch(0.97 0.01 290);
 
-  --card: oklch(0.20 0.008 60);
-  --card-foreground: oklch(0.94 0.025 80);
-  --popover: oklch(0.20 0.008 60);
-  --popover-foreground: oklch(0.94 0.025 80);
+  --card: oklch(0.14 0.05 285);
+  --card-foreground: oklch(0.97 0.01 290);
+  --popover: oklch(0.14 0.05 285);
+  --popover-foreground: oklch(0.97 0.01 290);
 
-  --primary: oklch(0.62 0.19 32);
-  --primary-foreground: oklch(0.98 0.01 80);
+  /* Purple primary */
+  --primary: oklch(0.58 0.26 290);
+  --primary-foreground: oklch(0.98 0.01 290);
 
-  --secondary: oklch(0.26 0.01 60);
-  --secondary-foreground: oklch(0.94 0.025 80);
+  --secondary: oklch(0.18 0.06 285);
+  --secondary-foreground: oklch(0.97 0.01 290);
 
-  --muted: oklch(0.24 0.008 60);
-  --muted-foreground: oklch(0.66 0.02 70);
+  --muted: oklch(0.18 0.05 285);
+  --muted-foreground: oklch(0.60 0.05 280);
 
-  --accent: oklch(0.28 0.012 60);
-  --accent-foreground: oklch(0.94 0.025 80);
+  --accent: oklch(0.20 0.07 285);
+  --accent-foreground: oklch(0.97 0.01 290);
 
   --destructive: oklch(0.55 0.22 27);
   --destructive-foreground: oklch(0.98 0.01 80);
 
-  --border: oklch(0.32 0.01 60 / 0.6);
-  --input: oklch(0.28 0.01 60);
-  --ring: oklch(0.62 0.19 32 / 0.6);
+  --border: oklch(0.28 0.07 285 / 0.5);
+  --input: oklch(0.18 0.06 285);
+  --ring: oklch(0.58 0.26 290 / 0.6);
+
+  /* Hot pink accent for badges */
+  --pink: oklch(0.65 0.30 330);
 }
 
 .dark {
-  --background: oklch(0.16 0.005 60);
-  --foreground: oklch(0.94 0.025 80);
+  --background: oklch(0.10 0.04 290);
+  --foreground: oklch(0.97 0.01 290);
 }
 
 @layer base {
@@ -80,28 +82,14 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
-    font-feature-settings: "ss01", "cv11";
     -webkit-font-smoothing: antialiased;
   }
-  h1, h2, h3, .font-display {
-    font-family: var(--font-display);
-    font-optical-sizing: auto;
-    letter-spacing: -0.02em;
-  }
 
-  .grain {
-    position: relative;
-    isolation: isolate;
+  /* Aurora grid background */
+  .aurora-grid {
+    background-image:
+      linear-gradient(to right, oklch(0.97 0.01 290 / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(0.97 0.01 290 / 0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
   }
-  .grain::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    opacity: 0.08;
-    mix-blend-mode: overlay;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-    z-index: 0;
-  }
-  .grain > * { position: relative; z-index: 1; }
 }

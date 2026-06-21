@@ -17,23 +17,24 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border/30 bg-background/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link to="/" className="flex items-center gap-2.5 font-display text-xl tracking-tight">
-            <Clapperboard className="h-5 w-5 text-primary" strokeWidth={1.5} />
+    <div className="min-h-screen aurora-grid" style={{ background: "oklch(0.10 0.04 290)" }}>
+      <header className="sticky top-0 z-40 border-b border-white/8 backdrop-blur-md" style={{ background: "oklch(0.10 0.04 290 / 0.85)" }}>
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+          <Link to="/" className="flex items-center gap-2.5 text-lg font-bold tracking-tight text-white">
+            <Clapperboard className="h-5 w-5" style={{ color: "oklch(0.65 0.30 330)" }} strokeWidth={1.5} />
             Perform Anywhere
           </Link>
-          <nav className="flex items-center gap-0.5 text-sm">
+          <nav className="flex items-center gap-1 text-sm">
             {NAV.map(({ to, label, Icon }) => (
               <Link
                 key={to}
                 to={to}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 transition ${
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition ${
                   isActive(to)
-                    ? "bg-accent text-foreground font-medium"
-                    : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                    ? "font-semibold text-white"
+                    : "text-white/50 hover:text-white/80"
                 }`}
+                style={isActive(to) ? { background: "oklch(0.58 0.26 290 / 0.25)" } : {}}
               >
                 <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />
                 <span className="hidden sm:inline">{label}</span>
