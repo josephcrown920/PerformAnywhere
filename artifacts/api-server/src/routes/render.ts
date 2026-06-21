@@ -219,6 +219,8 @@ async function startRenderJob(opts: {
           }).eq("id", renderId)
         : Promise.resolve(),
     ]);
+
+    fireWebhook({ event: "render.succeeded", projectId, clientId, provider: result.provider, outputPath });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[render] job failed:", msg);
@@ -228,7 +230,27 @@ async function startRenderJob(opts: {
         ? sb.from("project_renders").update({ status: "failed", error_message: msg }).eq("id", renderId)
         : Promise.resolve(),
     ]);
+
+    fireWebhook({ event: "render.failed", projectId, clientId, error: msg });
   }
+}
+
+// ─── Webhook helper ───────────────────────────────────────────────────────────
+// Set WEBHOOK_URL env var to receive POST notifications when renders complete.
+// Payload: { event, projectId, clientId, provider?, outputPath?, error?, timestamp }
+
+function fireWebhook(payload: Record<string, unknown>): void {
+  const url = process.env.WEBHOOK_URL;
+  if (!url) return;
+  fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(process.env.WEBHOOK_SECRET ? { "X-Aurora-Signature": process.env.WEBHOOK_SECRET } : {}),
+    },
+    body: JSON.stringify({ ...payload, timestamp: new Date().toISOString() }),
+    signal: AbortSignal.timeout(10_000),
+  }).catch((err) => console.warn("[webhook] delivery failed:", err?.message));
 }
 
 // ─── POST /api/render/poll ────────────────────────────────────────────────────

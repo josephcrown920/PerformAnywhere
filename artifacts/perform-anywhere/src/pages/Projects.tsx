@@ -1,9 +1,9 @@
 import { Link } from "wouter";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { api } from "@/lib/api";
 import { getClientId } from "@/lib/client-id";
-import { Plus, Film, Clock, CheckCircle2, XCircle, Loader2, Circle } from "lucide-react";
+import { Plus, Film, Clock, CheckCircle2, XCircle, Loader2, Circle, RefreshCw } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 
 type Project = {
@@ -27,7 +27,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; Icon: React.
 export function StatusPill({ status }: { status: string }) {
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.draft;
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-semibold`} style={{ color: cfg.color }}>
+    <span className="inline-flex items-center gap-1 text-xs font-semibold" style={{ color: cfg.color }}>
       <cfg.Icon className={`h-3 w-3 ${status === "running" ? "animate-spin" : ""}`} />
       {cfg.label}
     </span>
@@ -36,18 +36,41 @@ export function StatusPill({ status }: { status: string }) {
 
 export default function Projects() {
   const [projects, setProjects] = useState<Project[] | null>(null);
-  const [clientId, setClientId] = useState("");
+  const [clientId, setClientId]   = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchProjects = useCallback(async (cid: string) => {
+    const { data } = await supabase
+      .from("projects")
+      .select("id,title,status,provider,created_at,error_message,output_path")
+      .eq("client_id", cid)
+      .order("created_at", { ascending: false });
+    setProjects((data as Project[]) ?? []);
+  }, []);
 
   useEffect(() => {
     const cid = getClientId();
     setClientId(cid);
-    supabase
-      .from("projects")
-      .select("id,title,status,provider,created_at,error_message,output_path")
-      .eq("client_id", cid)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => setProjects((data as Project[]) ?? []));
-  }, []);
+    fetchProjects(cid);
+  }, [fetchProjects]);
+
+  // Auto-poll every 8 s while any render is active
+  useEffect(() => {
+    if (!clientId || !projects) return;
+    const hasActive = projects.some((p) => p.status === "running" || p.status === "queued");
+    if (!hasActive) return;
+    const id = setInterval(() => fetchProjects(clientId), 8000);
+    return () => clearInterval(id);
+  }, [clientId, projects, fetchProjects]);
+
+  async function handleManualRefresh() {
+    if (!clientId) return;
+    setRefreshing(true);
+    await fetchProjects(clientId);
+    setRefreshing(false);
+  }
+
+  const activeCount = projects?.filter((p) => p.status === "running" || p.status === "queued").length ?? 0;
 
   return (
     <AppLayout>
@@ -59,14 +82,35 @@ export default function Projects() {
             </p>
             <h1 className="text-4xl font-bold text-white">Your library</h1>
           </div>
-          <Link
-            to="/studio"
-            className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition hover:opacity-90"
-            style={{ background: "oklch(0.65 0.30 330)" }}
-          >
-            <Plus className="h-4 w-4" />
-            New render
-          </Link>
+
+          <div className="flex items-center gap-3">
+            {/* Live refresh indicator */}
+            {activeCount > 0 && (
+              <div className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-white/50"
+                style={{ background: "oklch(0.58 0.26 290 / 0.15)", border: "1px solid oklch(0.58 0.26 290 / 0.3)" }}
+              >
+                <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: "oklch(0.65 0.30 330)" }} />
+                {activeCount} rendering
+              </div>
+            )}
+            <button
+              onClick={handleManualRefresh}
+              disabled={refreshing}
+              className="rounded-xl p-2 text-white/30 transition hover:text-white disabled:opacity-30"
+              style={{ border: "1px solid oklch(0.28 0.07 285 / 0.5)" }}
+              title="Refresh"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            </button>
+            <Link
+              to="/studio"
+              className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition hover:opacity-90"
+              style={{ background: "oklch(0.65 0.30 330)" }}
+            >
+              <Plus className="h-4 w-4" />
+              New render
+            </Link>
+          </div>
         </div>
 
         {projects === null ? (
@@ -107,17 +151,15 @@ function ProjectCard({ project: p, clientId }: { project: Project; clientId: str
       {/* Thumbnail */}
       <div className="relative aspect-video overflow-hidden" style={{ background: "oklch(0.10 0.04 290)" }}>
         {thumbUrl ? (
-          <video
-            src={thumbUrl}
-            className="absolute inset-0 w-full h-full object-cover"
-            autoPlay muted playsInline loop
-          />
+          <video src={thumbUrl} className="absolute inset-0 w-full h-full object-cover" autoPlay muted playsInline loop />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
             {p.status === "running" || p.status === "queued" ? (
               <div className="flex flex-col items-center gap-2">
                 <Loader2 className="h-7 w-7 animate-spin" style={{ color: "oklch(0.58 0.26 290)" }} />
-                <span className="text-xs text-white/40">Rendering…</span>
+                <span className="text-xs text-white/40">
+                  {p.status === "running" ? "Rendering…" : "In queue…"}
+                </span>
               </div>
             ) : p.status === "failed" ? (
               <XCircle className="h-8 w-8 text-red-400/40" />
@@ -127,7 +169,7 @@ function ProjectCard({ project: p, clientId }: { project: Project; clientId: str
           </div>
         )}
 
-        {/* Status badge overlay */}
+        {/* Status badge */}
         <div className="absolute top-2.5 left-2.5">
           <span
             className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white backdrop-blur-sm"

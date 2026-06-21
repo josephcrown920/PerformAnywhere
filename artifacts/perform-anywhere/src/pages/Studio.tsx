@@ -1,14 +1,21 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { api } from "@/lib/api";
 import { getClientId } from "@/lib/client-id";
+import {
+  saveDraftText, loadDraftText,
+  saveDraftFile, deleteDraftFile, loadDraftFiles,
+  clearDraft,
+} from "@/lib/draft-storage";
 import { toast } from "sonner";
-import { Loader2, Sparkles, Upload, X, CheckCircle2, Zap, Star } from "lucide-react";
+import { Loader2, Sparkles, Upload, X, CheckCircle2, Zap, Star, History } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 
 type AssetKind = "performance" | "identity" | "outfit" | "scene";
 type StagedFile = { file: File; preview: string };
+
+const FILE_LIMITS: Record<string, number> = { video: 200, image: 15 };
 
 const STYLE_CHIPS = [
   "Cinematic 35mm", "Anime", "Film noir", "Neon cyberpunk",
@@ -16,9 +23,9 @@ const STYLE_CHIPS = [
 ];
 
 const MODELS = [
-  { id: "kling-v1-6-std",  label: "Kling v1.6",        badge: "Fast",    note: "~2–3 min · standard quality" },
-  { id: "kling-v1-6-pro",  label: "Kling v1.6 Pro",     badge: "Quality", note: "~4–6 min · best quality" },
-  { id: "hailuo",          label: "Hailuo (Minimax)",   badge: "Alt",     note: "~3–5 min · different style" },
+  { id: "kling-v1-6-std",  label: "Kling v1.6",       badge: "Fast",    note: "~2–3 min · standard quality" },
+  { id: "kling-v1-6-pro",  label: "Kling v1.6 Pro",    badge: "Quality", note: "~4–6 min · best quality" },
+  { id: "hailuo",          label: "Hailuo (Minimax)",  badge: "Alt",     note: "~3–5 min · different style" },
 ] as const;
 
 const WIZARD_STEPS = [
@@ -29,20 +36,22 @@ const WIZARD_STEPS = [
 
 export default function Studio() {
   const [, navigate] = useLocation();
-  const [step, setStep] = useState(1);
-  const [title, setTitle] = useState("Untitled performance");
-  const [files, setFiles] = useState<Record<AssetKind, StagedFile | null>>({
+  const [step, setStep]               = useState(1);
+  const [title, setTitle]             = useState("Untitled performance");
+  const [files, setFiles]             = useState<Record<AssetKind, StagedFile | null>>({
     performance: null, identity: null, outfit: null, scene: null,
   });
   const [selectedModel, setSelectedModel] = useState("kling-v1-6-std");
-  const [scenePrompt, setScenePrompt] = useState("");
-  const [stylePrompt, setStylePrompt] = useState("");
-  const [customPrompt, setCustomPrompt] = useState("");
-  const [enhanced, setEnhanced] = useState("");
-  const [enhancing, setEnhancing] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [scenePrompt, setScenePrompt]     = useState("");
+  const [stylePrompt, setStylePrompt]     = useState("");
+  const [customPrompt, setCustomPrompt]   = useState("");
+  const [enhanced, setEnhanced]           = useState("");
+  const [enhancing, setEnhancing]         = useState(false);
+  const [submitting, setSubmitting]       = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Prevent browser from navigating if user accidentally drops a file outside a dropzone
+  // ── Prevent browser navigation on accidental file drop ──────────────────────
   useEffect(() => {
     const prevent = (e: DragEvent) => e.preventDefault();
     window.addEventListener("dragover", prevent);
@@ -53,11 +62,76 @@ export default function Studio() {
     };
   }, []);
 
+  // ── Restore draft on mount ───────────────────────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      const text = loadDraftText();
+      const fileRecords = await loadDraftFiles();
+      if (!text && fileRecords.length === 0) return;
+
+      if (text) {
+        setTitle(text.title);
+        setSelectedModel(text.selectedModel);
+        setScenePrompt(text.scenePrompt);
+        setStylePrompt(text.stylePrompt);
+        setCustomPrompt(text.customPrompt);
+        setEnhanced(text.enhanced);
+        setStep(text.step);
+      }
+
+      if (fileRecords.length > 0) {
+        const restored: Record<AssetKind, StagedFile | null> = {
+          performance: null, identity: null, outfit: null, scene: null,
+        };
+        for (const { kind, file, preview } of fileRecords) {
+          restored[kind as AssetKind] = { file, preview };
+        }
+        setFiles(restored);
+      }
+
+      setDraftRestored(true);
+      toast.success("Draft restored", {
+        description: "Your previous session was saved automatically.",
+        icon: "✦",
+      });
+    })();
+  }, []);
+
+  // ── Auto-save text state ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveDraftText({ title, selectedModel, scenePrompt, stylePrompt, customPrompt, enhanced, step, savedAt: Date.now() });
+    }, 600);
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+  }, [title, selectedModel, scenePrompt, stylePrompt, customPrompt, enhanced, step]);
+
+  // ── File state + IndexedDB ───────────────────────────────────────────────────
   function setFile(kind: AssetKind, f: File | null) {
     setFiles((prev) => {
       if (prev[kind]) URL.revokeObjectURL(prev[kind]!.preview);
       return { ...prev, [kind]: f ? { file: f, preview: URL.createObjectURL(f) } : null };
     });
+    if (f) {
+      saveDraftFile(kind, f).catch(() => {});
+    } else {
+      deleteDraftFile(kind).catch(() => {});
+    }
+  }
+
+  async function handleClearDraft() {
+    await clearDraft();
+    setTitle("Untitled performance");
+    setSelectedModel("kling-v1-6-std");
+    setScenePrompt(""); setStylePrompt(""); setCustomPrompt(""); setEnhanced("");
+    setStep(1);
+    Object.keys(files).forEach((k) => {
+      const f = files[k as AssetKind];
+      if (f) URL.revokeObjectURL(f.preview);
+    });
+    setFiles({ performance: null, identity: null, outfit: null, scene: null });
+    setDraftRestored(false);
+    toast.success("Draft cleared");
   }
 
   async function handleEnhance() {
@@ -81,7 +155,6 @@ export default function Studio() {
     try {
       const clientId = getClientId();
 
-      // Try inserting with selected_model; fall back if the column doesn't exist yet (run migration 001)
       const baseInsert = {
         client_id: clientId, title, status: "draft",
         scene_prompt: scenePrompt || null,
@@ -113,6 +186,7 @@ export default function Studio() {
       }
 
       await api.startRender({ clientId, projectId: project.id, model: selectedModel });
+      await clearDraft();
       toast.success("Render queued!");
       navigate(`/projects/${project.id}`);
     } catch (err) {
@@ -122,7 +196,7 @@ export default function Studio() {
     }
   }
 
-  const canGoNext = step === 1 ? (!!files.performance && !!files.identity) : true;
+  const canGoNext   = step === 1 ? (!!files.performance && !!files.identity) : true;
   const activeModel = MODELS.find((m) => m.id === selectedModel) ?? MODELS[0];
 
   return (
@@ -130,13 +204,31 @@ export default function Studio() {
       <main className="mx-auto max-w-5xl px-6 py-14">
 
         {/* Header */}
-        <div className="mb-12">
-          <h1 className="text-5xl font-bold tracking-tight text-white leading-tight">
-            Direct your <span style={{ color: "oklch(0.65 0.30 330)" }}>shoot.</span>
-          </h1>
-          <p className="mt-3 text-white/50 text-lg">
-            Drop references → write direction → generate. That's it.
-          </p>
+        <div className="mb-10 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-5xl font-bold tracking-tight text-white leading-tight">
+              Direct your <span style={{ color: "oklch(0.65 0.30 330)" }}>shoot.</span>
+            </h1>
+            <p className="mt-3 text-white/50 text-lg">Drop references → write direction → generate. That's it.</p>
+          </div>
+
+          {/* Draft restored badge */}
+          {draftRestored && (
+            <div
+              className="mt-1 flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-white/60"
+              style={{ background: "oklch(0.58 0.26 290 / 0.15)", border: "1px solid oklch(0.58 0.26 290 / 0.4)" }}
+            >
+              <History className="h-3.5 w-3.5" style={{ color: "oklch(0.65 0.30 330)" }} />
+              Draft restored
+              <button
+                type="button"
+                onClick={handleClearDraft}
+                className="ml-1 text-white/30 hover:text-white/70 transition"
+              >
+                Clear ×
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Step bar */}
@@ -177,10 +269,10 @@ export default function Studio() {
               />
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <Dropzone kind="performance" label="Performance video" hint="≤ 30 s · MP4, MOV, WebM" accept="video/*" file={files.performance} onChange={(f) => setFile("performance", f)} required badge="01" />
-              <Dropzone kind="identity"    label="Identity photo"    hint="Clear face · JPG, PNG"   accept="image/*" file={files.identity}    onChange={(f) => setFile("identity", f)}    required badge="02" />
-              <Dropzone kind="outfit"      label="Outfit reference"  hint="Optional · clothing"     accept="image/*" file={files.outfit}      onChange={(f) => setFile("outfit", f)}             badge="03" />
-              <Dropzone kind="scene"       label="Scene reference"   hint="Optional · environment"  accept="image/*" file={files.scene}       onChange={(f) => setFile("scene", f)}              badge="04" />
+              <Dropzone kind="performance" label="Performance video" hint="≤ 200 MB · MP4, MOV, WebM" accept="video/*" file={files.performance} onChange={(f) => setFile("performance", f)} required badge="01" />
+              <Dropzone kind="identity"    label="Identity photo"    hint="≤ 15 MB · JPG, PNG"        accept="image/*" file={files.identity}    onChange={(f) => setFile("identity", f)}    required badge="02" />
+              <Dropzone kind="outfit"      label="Outfit reference"  hint="Optional · clothing"        accept="image/*" file={files.outfit}      onChange={(f) => setFile("outfit", f)}             badge="03" />
+              <Dropzone kind="scene"       label="Scene reference"   hint="Optional · environment"     accept="image/*" file={files.scene}       onChange={(f) => setFile("scene", f)}              badge="04" />
             </div>
             <p className="text-xs text-white/30">Performance video and identity photo are required to continue.</p>
           </div>
@@ -189,7 +281,6 @@ export default function Studio() {
         {/* Step 2: Direction */}
         {step === 2 && (
           <div className="space-y-8">
-
             {/* Model picker */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-3">AI Model</p>
@@ -217,22 +308,18 @@ export default function Studio() {
                         </span>
                       </div>
                       <span className="text-xs text-white/40">{m.note}</span>
-                      {active && (
-                        <div className="absolute top-3 right-3 h-2 w-2 rounded-full animate-pulse" style={{ background: "oklch(0.65 0.30 330)" }} />
-                      )}
+                      {active && <div className="absolute top-3 right-3 h-2 w-2 rounded-full animate-pulse" style={{ background: "oklch(0.65 0.30 330)" }} />}
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Custom prompt — direct override */}
+            {/* Custom prompt */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold uppercase tracking-widest text-white/40" htmlFor="custom-prompt">
-                  Direct prompt <span className="normal-case tracking-normal text-white/20 font-normal ml-1">(optional — overrides AI enhancement)</span>
-                </label>
-              </div>
+              <label className="block text-xs font-semibold uppercase tracking-widest text-white/40 mb-2" htmlFor="custom-prompt">
+                Direct prompt <span className="normal-case tracking-normal text-white/20 font-normal ml-1">(optional — overrides AI enhancement)</span>
+              </label>
               <textarea
                 id="custom-prompt"
                 rows={3}
@@ -246,7 +333,7 @@ export default function Studio() {
 
             {/* Style chips */}
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-3">Style chips — tap to add</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-3">Style chips</p>
               <div className="flex flex-wrap gap-2">
                 {STYLE_CHIPS.map((s) => (
                   <button key={s} type="button"
@@ -260,7 +347,7 @@ export default function Studio() {
               </div>
             </div>
 
-            {/* Scene + style notes */}
+            {/* Scene + style textareas */}
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-widest text-white/40 mb-2" htmlFor="scene-notes">Scene notes</label>
@@ -282,7 +369,7 @@ export default function Studio() {
               </div>
             </div>
 
-            {/* Enhance button */}
+            {/* Enhance */}
             {!customPrompt && (
               <div className="flex items-center gap-4">
                 <button type="button" onClick={handleEnhance} disabled={enhancing}
@@ -308,19 +395,21 @@ export default function Studio() {
         {/* Step 3: Review */}
         {step === 3 && (
           <div className="space-y-5">
-            <div className="rounded-2xl overflow-hidden divide-y" style={{ background: "oklch(0.14 0.05 285)", border: "1px solid oklch(0.28 0.07 285 / 0.5)", borderColor: "oklch(0.28 0.07 285 / 0.3)" }}>
-              <ReviewRow label="Title"        value={title} />
-              <ReviewRow label="Model"        value={activeModel.label} highlight />
-              <ReviewRow label="Performance"  value={files.performance?.file.name ?? "—"} />
-              <ReviewRow label="Identity"     value={files.identity?.file.name ?? "—"} />
-              <ReviewRow label="Outfit"       value={files.outfit?.file.name ?? "—"} />
-              <ReviewRow label="Scene ref"    value={files.scene?.file.name ?? "—"} />
+            <div className="rounded-2xl overflow-hidden divide-y"
+              style={{ background: "oklch(0.14 0.05 285)", borderColor: "oklch(0.28 0.07 285 / 0.3)", border: "1px solid oklch(0.28 0.07 285 / 0.3)" }}
+            >
+              <ReviewRow label="Title"       value={title} />
+              <ReviewRow label="Model"       value={activeModel.label} highlight />
+              <ReviewRow label="Performance" value={files.performance?.file.name ?? "—"} />
+              <ReviewRow label="Identity"    value={files.identity?.file.name ?? "—"} />
+              <ReviewRow label="Outfit"      value={files.outfit?.file.name ?? "—"} />
+              <ReviewRow label="Scene ref"   value={files.scene?.file.name ?? "—"} />
               {customPrompt
-                ? <ReviewRow label="Prompt" value={customPrompt} />
+                ? <ReviewRow label="Prompt"     value={customPrompt} />
                 : <>
-                    {scenePrompt && <ReviewRow label="Scene notes"  value={scenePrompt} />}
-                    {stylePrompt && <ReviewRow label="Style notes"  value={stylePrompt} />}
-                    {enhanced    && <ReviewRow label="AI prompt"    value={enhanced} />}
+                    {scenePrompt && <ReviewRow label="Scene notes" value={scenePrompt} />}
+                    {stylePrompt && <ReviewRow label="Style notes" value={stylePrompt} />}
+                    {enhanced    && <ReviewRow label="AI prompt"   value={enhanced} />}
                   </>
               }
             </div>
@@ -339,7 +428,6 @@ export default function Studio() {
           >
             {step > 1 ? "← Back" : "Cancel"}
           </button>
-
           {step < 3 ? (
             <button type="button" onClick={() => setStep(step + 1)} disabled={!canGoNext}
               className="rounded-xl px-7 py-2.5 text-sm font-bold text-white transition disabled:opacity-30"
@@ -379,6 +467,16 @@ function Dropzone({ label, hint, accept, file, onChange, required, badge, kind }
 }) {
   const [dragging, setDragging] = useState(false);
   const isVideo = accept.startsWith("video");
+  const maxMB   = FILE_LIMITS[isVideo ? "video" : "image"];
+
+  function handleFile(f: File) {
+    const sizeMB = f.size / (1024 * 1024);
+    if (sizeMB > maxMB) {
+      toast.error(`File too large (${Math.round(sizeMB)} MB — max ${maxMB} MB)`);
+      return;
+    }
+    onChange(f);
+  }
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -389,8 +487,8 @@ function Dropzone({ label, hint, accept, file, onChange, required, badge, kind }
       toast.error(`Please drop a ${isVideo ? "video" : "image"} file`);
       return;
     }
-    onChange(f);
-  }, [accept, isVideo, onChange]);
+    handleFile(f);
+  }, [accept, isVideo]);
 
   return (
     <div
@@ -402,7 +500,6 @@ function Dropzone({ label, hint, accept, file, onChange, required, badge, kind }
       onDrop={handleDrop}
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
       onDragLeave={(e) => {
-        // Only clear when the pointer actually leaves this container — not when entering a child element
         if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false);
       }}
     >
@@ -433,25 +530,15 @@ function Dropzone({ label, hint, accept, file, onChange, required, badge, kind }
       <label className="block cursor-pointer mx-3 mb-3 overflow-hidden rounded-xl">
         {file ? (
           isVideo
-            ? <video
-                key={file.preview}
-                src={file.preview}
-                className="aspect-video w-full object-cover rounded-xl"
-                autoPlay muted playsInline loop
-              />
+            ? <video key={file.preview} src={file.preview} className="aspect-video w-full object-cover rounded-xl" autoPlay muted playsInline loop />
             : <img src={file.preview} alt={kind} className="aspect-video w-full object-cover rounded-xl" />
         ) : (
           <div
             className="flex aspect-video flex-col items-center justify-center gap-2 rounded-xl"
-            style={{
-              background: dragging ? "oklch(0.58 0.26 290 / 0.10)" : "oklch(0.10 0.04 290 / 0.6)",
-              border: "1.5px dashed oklch(0.40 0.10 285 / 0.4)",
-            }}
+            style={{ background: "oklch(0.10 0.04 290 / 0.6)", border: "1.5px dashed oklch(0.40 0.10 285 / 0.4)" }}
           >
             <Upload className="h-5 w-5 text-white/25" />
-            <span className="text-xs text-white/25 font-medium">
-              {dragging ? "Drop here" : "Click or drag to upload"}
-            </span>
+            <span className="text-xs text-white/25 font-medium">{dragging ? "Drop here" : "Click or drag to upload"}</span>
           </div>
         )}
         <input
@@ -459,7 +546,7 @@ function Dropzone({ label, hint, accept, file, onChange, required, badge, kind }
           accept={accept}
           className="hidden"
           onClick={(e) => { (e.currentTarget as HTMLInputElement).value = ""; }}
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onChange(f); }}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
         />
       </label>
     </div>
