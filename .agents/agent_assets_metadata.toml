@@ -1,0 +1,14 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "fQHbaCe6nLCG-ONCoDE9Z"
+uri = "file://artifacts/nba-josh/public/images/bg-street.png"
+type = "image"
+title = "Urban street at night"
+
+[[generated]]
+id = "fD2iPlOjgOI6jgM1CNMQ9"
+uri = "file://artifacts/nba-josh/public/images/officers.png"
+type = "image"
+title = "Officers running"

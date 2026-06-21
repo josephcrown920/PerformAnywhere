@@ -1,0 +1,31 @@
+kind = "video"
+previewPath = "/nba-josh/"
+title = "NBA Josh — Looping Officers"
+version = "1.0.0"
+id = "artifacts/nba-josh"
+router = "path"
+
+[[integratedSkills]]
+name = "video-js"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/nba-josh/" ]
+localPort = 18230
+
+[services.development]
+run = "pnpm --filter @workspace/nba-josh run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/nba-josh", "run", "build" ]
+publicDir = "artifacts/nba-josh/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18230"
+BASE_PATH = "/nba-josh/"
