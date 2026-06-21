@@ -305,7 +305,7 @@ function Dropzone({ label, hint, accept, file, onChange, required, kind }: {
             <span className="text-xs">Click to upload</span>
           </div>
         )}
-        <input type="file" accept={accept} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onChange(f); }} />
+        <input type="file" accept={accept} className="hidden" onClick={(e) => { (e.currentTarget as HTMLInputElement).value = ""; }} onChange={(e) => { const f = e.target.files?.[0]; if (f) onChange(f); }} />
       </label>
     </div>
   );
