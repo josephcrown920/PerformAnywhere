@@ -387,6 +387,44 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
     return { provider: "hailuo", model, output_url: url, raw: j };
   },
 
+  // WAN 2.1 via Replicate — inference layer fallback (no Fal credits needed)
+  wan: async ({ prompt, options = {} }) => {
+    const key = env("REPLICATE_API_TOKEN");
+    if (!key) throw new ProviderUnconfigured("wan");
+    const model = options.imageUrl
+      ? "wavespeedai/wan-2.1-i2v-480p"
+      : "wavespeedai/wan-2.1-t2v-480p";
+    const input: Record<string, unknown> = {
+      prompt: String(prompt).slice(0, 2500),
+      num_frames: 81,
+      fps: 16,
+      aspect_ratio: options.aspectRatio ?? "16:9",
+      fast_mode: "Balanced",
+    };
+    if (options.imageUrl) input.image = options.imageUrl;
+
+    const startRes = await fetch(`https://api.replicate.com/v1/models/${model}/predictions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, Prefer: "wait=5" },
+      body: JSON.stringify({ input }),
+    });
+    if (!startRes.ok) throw new Error(`wan/replicate submit ${startRes.status}: ${await startRes.text()}`);
+    let pred = await startRes.json() as { id: string; status: string; output?: unknown; error?: string };
+
+    // Poll up to 8 min
+    for (let i = 0; i < 96 && ["starting", "processing"].includes(pred.status); i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      const poll = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      pred = await poll.json() as typeof pred;
+    }
+    if (pred.status !== "succeeded") throw new Error(`wan/replicate failed: ${pred.error ?? pred.status}`);
+    const url = Array.isArray(pred.output) ? (pred.output as string[])[0] : pred.output as string;
+    if (!url) throw new Error("wan/replicate: no video url in output");
+    return { provider: "wan", model, output_url: url, raw: pred };
+  },
+
   // Runway Gen-4 via fal.ai
   runway: async ({ prompt, options = {} }) => {
     const key = env("FAL_KEY");
