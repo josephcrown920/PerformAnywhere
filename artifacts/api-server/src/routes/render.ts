@@ -6,7 +6,38 @@ const router = Router();
 const RENDER_BUCKET = "renders";
 const ASSET_BUCKET = "uploads";
 
-// POST /api/render/start
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+type Asset = { kind: string; storage_path: string };
+
+async function signAsset(sb: ReturnType<typeof createAnonClient>, path: string): Promise<string | null> {
+  const { data } = await sb.storage.from(ASSET_BUCKET).createSignedUrl(path, 3600);
+  return data?.signedUrl ?? null;
+}
+
+/** Build the richest possible prompt, weaving in all asset context. */
+function buildPrompt(opts: {
+  enhanced?: string | null;
+  scene?: string | null;
+  style?: string | null;
+  hasIdentity: boolean;
+  hasOutfit: boolean;
+  hasScene: boolean;
+}): string {
+  if (opts.enhanced) return opts.enhanced;
+  const parts: string[] = [];
+  if (opts.hasIdentity) parts.push("preserving the subject's exact facial likeness from the identity reference");
+  if (opts.hasOutfit) parts.push("matching the outfit and clothing style from the reference");
+  if (opts.hasScene) parts.push("incorporating the scene/environment aesthetics from the reference image");
+  if (opts.scene) parts.push(opts.scene);
+  if (opts.style) parts.push(opts.style);
+  return parts.length
+    ? `A cinematic performance video. ${parts.join(". ")}.`
+    : "A cinematic performance video, realistic quality, professional lighting.";
+}
+
+// ─── POST /api/render/start ───────────────────────────────────────────────────
+
 router.post("/start", async (req, res) => {
   const { clientId: rawCid, projectId } = req.body as { clientId: unknown; projectId: string };
   let clientId: string;
@@ -23,44 +54,62 @@ router.post("/start", async (req, res) => {
     .single();
   if (error || !project) return res.status(404).json({ error: "project_not_found" });
 
+  // Don't re-queue an already running/succeeded job
+  if ((project as { status: string }).status === "running") {
+    return res.json({ ok: true, provider: "kling", jobId: "", note: "already_running" });
+  }
+
   const { data: assets } = await sb
     .from("project_assets")
     .select("kind,storage_path")
     .eq("project_id", projectId);
 
-  const performance = assets?.find((a) => a.kind === "performance");
+  const performance = (assets ?? []).find((a) => a.kind === "performance");
   if (!performance) return res.status(400).json({ error: "performance_video_required" });
 
   await sb.from("projects").update({ status: "queued", error_message: null }).eq("id", projectId);
+
+  const p = project as {
+    enhanced_prompt?: string | null;
+    scene_prompt?: string | null;
+    style_prompt?: string | null;
+  };
+
+  const prompt = buildPrompt({
+    enhanced: p.enhanced_prompt,
+    scene: p.scene_prompt,
+    style: p.style_prompt,
+    hasIdentity: !!(assets ?? []).find((a) => a.kind === "identity"),
+    hasOutfit: !!(assets ?? []).find((a) => a.kind === "outfit"),
+    hasScene: !!(assets ?? []).find((a) => a.kind === "scene"),
+  });
 
   const { data: render } = await sb.from("project_renders").insert({
     project_id: projectId,
     client_id: clientId,
     provider: "kling",
     status: "queued",
-    prompt: (project as { enhanced_prompt?: string; scene_prompt?: string }).enhanced_prompt
-      || (project as { scene_prompt?: string }).scene_prompt
-      || "realistic video",
+    prompt,
   }).select("id").single();
 
-  // Fire-and-forget render job (in the background)
+  const renderId = (render as { id?: string } | null)?.id;
+
+  // Fire-and-forget background job
   startRenderJob({
     projectId,
     clientId,
-    renderId: (render as { id?: string })?.id,
-    prompt: (project as { enhanced_prompt?: string; scene_prompt?: string; style_prompt?: string }).enhanced_prompt
-      || [(project as { scene_prompt?: string }).scene_prompt, (project as { style_prompt?: string }).style_prompt].filter(Boolean).join(". ")
-      || "realistic performance video",
+    renderId,
+    prompt,
     assets: assets ?? [],
     sb,
   }).catch((err) => {
-    console.error("[render] background job error", err);
+    console.error("[render] unhandled background error", err);
   });
 
-  return res.json({ ok: true, provider: "kling", jobId: (render as { id?: string })?.id ?? "" });
+  return res.json({ ok: true, provider: "kling", jobId: renderId ?? "" });
 });
 
-type Asset = { kind: string; storage_path: string };
+// ─── Background render job ────────────────────────────────────────────────────
 
 async function startRenderJob(opts: {
   projectId: string;
@@ -69,62 +118,102 @@ async function startRenderJob(opts: {
   prompt: string;
   assets: Asset[];
   sb: ReturnType<typeof createAnonClient>;
+  preferredProvider?: string;
 }) {
-  const { projectId, clientId, renderId, prompt, assets, sb } = opts;
+  const { projectId, clientId, renderId, prompt, assets, sb, preferredProvider } = opts;
 
-  const update = (status: string, extra: Record<string, unknown> = {}) =>
+  const updateStatus = (status: string, extra: Record<string, unknown> = {}) =>
     Promise.all([
       sb.from("projects").update({ status, ...extra }).eq("id", projectId),
-      renderId ? sb.from("project_renders").update({ status }).eq("id", renderId) : Promise.resolve(),
+      renderId
+        ? sb.from("project_renders").update({ status }).eq("id", renderId)
+        : Promise.resolve(),
     ]);
 
   try {
-    await update("running");
+    await updateStatus("running");
 
-    const performanceAsset = assets.find((a) => a.kind === "performance");
-    if (!performanceAsset) throw new Error("no_performance_asset");
-
-    const { data: signedData } = await sb.storage.from(ASSET_BUCKET).createSignedUrl(performanceAsset.storage_path, 3600);
-    const signedUrl = signedData?.signedUrl;
-    if (!signedUrl) throw new Error("Could not sign performance video URL");
+    // Sign the identity photo — this is the correct still-image reference for image2video models
+    const identityAsset = assets.find((a) => a.kind === "identity");
+    const identityUrl = identityAsset ? await signAsset(sb, identityAsset.storage_path) : null;
 
     const { videoAdapters } = await import("../lib/orchestrate/providers.js");
-    const adapter = videoAdapters.kling;
-    if (!adapter) throw new Error("kling adapter not available");
 
-    const result = await adapter({
-      model: "kling-v1-6-std",
-      prompt,
-      options: { imageUrl: signedUrl, duration: 5 },
-    });
+    // Provider priority: preferred (from retry) → kling → hailuo → fal
+    const providerOrder = preferredProvider
+      ? [preferredProvider, ...["kling", "hailuo", "fal"].filter((p) => p !== preferredProvider)]
+      : ["kling", "hailuo", "fal"];
 
-    const outputPath = `${clientId}/${projectId}/render.mp4`;
-    if (result.output_url) {
-      const videoResp = await fetch(result.output_url);
-      if (!videoResp.ok) throw new Error(`Download render failed: ${videoResp.status}`);
-      const buf = await videoResp.arrayBuffer();
-      await sb.storage.from(RENDER_BUCKET).upload(outputPath, Buffer.from(buf), {
-        contentType: "video/mp4",
-        upsert: true,
-      });
+    let lastError = "no provider succeeded";
+    let result: { provider: string; model: string; output_url?: string; raw?: unknown } | null = null;
+
+    for (const provider of providerOrder) {
+      const adapter = videoAdapters[provider];
+      if (!adapter) continue;
+
+      try {
+        const model = provider === "kling" ? "kling-v1-6-std"
+          : provider === "hailuo" ? "hailuo"
+          : "fal-ai/kling-video/v1.6/standard/image-to-video";
+
+        const options: Record<string, unknown> = { duration: 5 };
+        // Use the identity photo (a real still image) as the reference — never pass a video as imageUrl
+        if (identityUrl) options.imageUrl = identityUrl;
+
+        result = await adapter({ model, prompt, options });
+        break;
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+        console.error(`[render] ${provider} failed:`, lastError);
+        // Continue to next provider
+      }
     }
 
-    await update("succeeded", { output_path: outputPath });
-    if (renderId) {
-      await sb.from("project_renders").update({
+    if (!result || !result.output_url) {
+      throw new Error(lastError);
+    }
+
+    // Download and store the rendered video
+    const outputPath = `${clientId}/${projectId}/render.mp4`;
+    const videoResp = await fetch(result.output_url, { signal: AbortSignal.timeout(120_000) });
+    if (!videoResp.ok) throw new Error(`Download of render failed: HTTP ${videoResp.status}`);
+    const buf = await videoResp.arrayBuffer();
+    const { error: uploadErr } = await sb.storage.from(RENDER_BUCKET).upload(
+      outputPath,
+      Buffer.from(buf),
+      { contentType: "video/mp4", upsert: true },
+    );
+    if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
+
+    await Promise.all([
+      sb.from("projects").update({
         status: "succeeded",
         output_path: outputPath,
-        provider_task_id: result.raw ? JSON.stringify(result.raw).slice(0, 200) : null,
-      }).eq("id", renderId);
-    }
+        provider: result.provider,
+        error_message: null,
+      }).eq("id", projectId),
+      renderId
+        ? sb.from("project_renders").update({
+            status: "succeeded",
+            output_path: outputPath,
+            provider_task_id: result.raw ? JSON.stringify(result.raw).slice(0, 200) : null,
+          }).eq("id", renderId)
+        : Promise.resolve(),
+    ]);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    await update("failed", { error_message: msg });
-    if (renderId) await sb.from("project_renders").update({ status: "failed", error_message: msg }).eq("id", renderId);
+    console.error("[render] job failed:", msg);
+    await Promise.all([
+      sb.from("projects").update({ status: "failed", error_message: msg }).eq("id", projectId),
+      renderId
+        ? sb.from("project_renders").update({ status: "failed", error_message: msg }).eq("id", renderId)
+        : Promise.resolve(),
+    ]);
   }
 }
 
-// POST /api/render/poll
+// ─── POST /api/render/poll ────────────────────────────────────────────────────
+
 router.post("/poll", async (req, res) => {
   const { clientId: rawCid, projectId } = req.body as { clientId: unknown; projectId: string };
   let clientId: string;
@@ -133,44 +222,114 @@ router.post("/poll", async (req, res) => {
   const sb = createAnonClient();
   const { data, error } = await sb
     .from("projects")
-    .select("status,output_path,error_message")
+    .select("status,output_path,error_message,updated_at")
     .eq("id", projectId)
     .eq("client_id", clientId)
     .single();
   if (error || !data) return res.status(404).json({ error: "not_found" });
 
-  const { status, error_message } = data as { status: string; output_path?: string; error_message?: string };
-  const output_path = (data as { output_path?: string }).output_path;
+  const row = data as { status: string; output_path?: string; error_message?: string; updated_at?: string };
+
+  // Stuck-job detection: if running for >15 min with no update, auto-fail it
+  if (row.status === "running" && row.updated_at) {
+    const ageMs = Date.now() - new Date(row.updated_at).getTime();
+    if (ageMs > 15 * 60 * 1000) {
+      await sb.from("projects").update({
+        status: "failed",
+        error_message: "Render timed out after 15 minutes. Please retry.",
+      }).eq("id", projectId);
+      return res.json({ status: "failed", error: "Render timed out after 15 minutes. Please retry." });
+    }
+  }
 
   const STATUS_MAP: Record<string, string> = {
     draft: "queued", queued: "queued", running: "running",
     succeeded: "succeeded", failed: "failed",
   };
   return res.json({
-    status: STATUS_MAP[status] ?? "queued",
-    outputPath: output_path ?? undefined,
-    error: error_message ?? undefined,
+    status: STATUS_MAP[row.status] ?? "queued",
+    outputPath: row.output_path ?? undefined,
+    error: row.error_message ?? undefined,
   });
 });
 
-// POST /api/render/retry
+// ─── POST /api/render/retry ───────────────────────────────────────────────────
+
 router.post("/retry", async (req, res) => {
-  const { clientId: rawCid, projectId, provider } = req.body as { clientId: unknown; projectId: string; provider: string };
+  const { clientId: rawCid, projectId, provider } = req.body as {
+    clientId: unknown; projectId: string; provider: string;
+  };
   let clientId: string;
   try { clientId = assertClientId(rawCid); } catch { return res.status(400).json({ error: "invalid_client_id" }); }
 
-  const ALLOWED_PROVIDERS = ["kling", "runway", "hailuo"];
-  if (!ALLOWED_PROVIDERS.includes(provider)) return res.status(400).json({ error: "invalid_provider" });
+  const ALLOWED = ["kling", "hailuo", "fal", "runway"];
+  if (!ALLOWED.includes(provider)) return res.status(400).json({ error: "invalid_provider" });
 
   const sb = createAnonClient();
-  await sb.from("projects").update({ status: "draft", provider, error_message: null }).eq("id", projectId).eq("client_id", clientId);
-  return res.json({ ok: true });
+
+  const { data: project } = await sb
+    .from("projects")
+    .select("id,status,enhanced_prompt,scene_prompt,style_prompt")
+    .eq("id", projectId)
+    .eq("client_id", clientId)
+    .single();
+  if (!project) return res.status(404).json({ error: "project_not_found" });
+
+  const { data: assets } = await sb
+    .from("project_assets")
+    .select("kind,storage_path")
+    .eq("project_id", projectId);
+
+  const p = project as {
+    enhanced_prompt?: string | null;
+    scene_prompt?: string | null;
+    style_prompt?: string | null;
+  };
+
+  const prompt = buildPrompt({
+    enhanced: p.enhanced_prompt,
+    scene: p.scene_prompt,
+    style: p.style_prompt,
+    hasIdentity: !!(assets ?? []).find((a) => a.kind === "identity"),
+    hasOutfit: !!(assets ?? []).find((a) => a.kind === "outfit"),
+    hasScene: !!(assets ?? []).find((a) => a.kind === "scene"),
+  });
+
+  await sb.from("projects").update({ status: "queued", provider, error_message: null }).eq("id", projectId);
+
+  const { data: render } = await sb.from("project_renders").insert({
+    project_id: projectId,
+    client_id: clientId,
+    provider,
+    status: "queued",
+    prompt,
+  }).select("id").single();
+
+  startRenderJob({
+    projectId,
+    clientId,
+    renderId: (render as { id?: string } | null)?.id,
+    prompt,
+    assets: assets ?? [],
+    sb,
+    preferredProvider: provider,
+  }).catch((err) => console.error("[render] retry background error", err));
+
+  return res.json({ ok: true, provider });
 });
 
-// POST /api/render/signed-url/render
+// ─── POST /api/render/signed-url/render ──────────────────────────────────────
+
 router.post("/signed-url/render", async (req, res) => {
-  const { path } = req.body as { path: string };
+  const { path, clientId: rawCid } = req.body as { path: string; clientId?: unknown };
   if (!path || typeof path !== "string") return res.status(400).json({ error: "path required" });
+
+  // Validate ownership: path must start with the requesting client's UUID prefix
+  let clientId: string | null = null;
+  try { if (rawCid) clientId = assertClientId(rawCid); } catch { /* optional */ }
+  if (clientId && !path.startsWith(`${clientId}/`)) {
+    return res.status(403).json({ error: "forbidden" });
+  }
 
   const sb = createAnonClient();
   const { data, error } = await sb.storage.from(RENDER_BUCKET).createSignedUrl(path, 3600);
@@ -178,10 +337,17 @@ router.post("/signed-url/render", async (req, res) => {
   return res.json({ url: data.signedUrl });
 });
 
-// POST /api/render/signed-url/asset
+// ─── POST /api/render/signed-url/asset ───────────────────────────────────────
+
 router.post("/signed-url/asset", async (req, res) => {
-  const { path } = req.body as { path: string };
+  const { path, clientId: rawCid } = req.body as { path: string; clientId?: unknown };
   if (!path || typeof path !== "string") return res.status(400).json({ error: "path required" });
+
+  let clientId: string | null = null;
+  try { if (rawCid) clientId = assertClientId(rawCid); } catch { /* optional */ }
+  if (clientId && !path.startsWith(`${clientId}/`)) {
+    return res.status(403).json({ error: "forbidden" });
+  }
 
   const sb = createAnonClient();
   const { data, error } = await sb.storage.from(ASSET_BUCKET).createSignedUrl(path, 3600);
@@ -189,29 +355,22 @@ router.post("/signed-url/asset", async (req, res) => {
   return res.json({ url: data.signedUrl });
 });
 
-// GET /api/render/providers
+// ─── GET /api/render/providers ───────────────────────────────────────────────
+
 router.get("/providers", (_req, res) => {
   const PROVIDERS = [
-    { id: "KLING_ACCESS_KEY", label: "Kling AI", configKey: "KLING_ACCESS_KEY" },
-    { id: "RUNWAY_API_KEY", label: "Runway ML", configKey: "RUNWAY_API_KEY" },
-    { id: "FAL_KEY", label: "Fal.ai", configKey: "FAL_KEY" },
-    { id: "REPLICATE_API_TOKEN", label: "Replicate", configKey: "REPLICATE_API_TOKEN" },
-    { id: "LOVABLE_API_KEY", label: "Lovable AI Gateway", configKey: "LOVABLE_API_KEY" },
-    { id: "GROQ_API_KEY", label: "Groq (text)", configKey: "GROQ_API_KEY" },
-    { id: "GEMINI_API_KEY", label: "Google Gemini", configKey: "GEMINI_API_KEY" },
-    { id: "OPENAI_API_KEY", label: "OpenAI", configKey: "OPENAI_API_KEY" },
-    { id: "HUGGINGFACE_API_KEY", label: "HuggingFace", configKey: "HUGGINGFACE_API_KEY" },
-    { id: "ELEVENLABS_API_KEY", label: "ElevenLabs (audio)", configKey: "ELEVENLABS_API_KEY" },
-    { id: "PAYSTACK_SECRET_KEY", label: "Paystack (billing)", configKey: "PAYSTACK_SECRET_KEY" },
+    { id: "KLING_ACCESS_KEY",      label: "Kling AI",            configKey: "KLING_ACCESS_KEY" },
+    { id: "FAL_KEY",               label: "Fal.ai (Hailuo/Runway)", configKey: "FAL_KEY" },
+    { id: "REPLICATE_API_TOKEN",   label: "Replicate",           configKey: "REPLICATE_API_TOKEN" },
+    { id: "LOVABLE_API_KEY",       label: "Lovable AI Gateway",  configKey: "LOVABLE_API_KEY" },
+    { id: "GROQ_API_KEY",          label: "Groq (text)",         configKey: "GROQ_API_KEY" },
+    { id: "GEMINI_API_KEY",        label: "Google Gemini",       configKey: "GEMINI_API_KEY" },
+    { id: "OPENAI_API_KEY",        label: "OpenAI",              configKey: "OPENAI_API_KEY" },
+    { id: "HUGGINGFACE_API_KEY",   label: "HuggingFace",         configKey: "HUGGINGFACE_API_KEY" },
+    { id: "ELEVENLABS_API_KEY",    label: "ElevenLabs (audio)",  configKey: "ELEVENLABS_API_KEY" },
+    { id: "PAYSTACK_SECRET_KEY",   label: "Paystack (billing)",  configKey: "PAYSTACK_SECRET_KEY" },
   ];
-
-  return res.json(
-    PROVIDERS.map((p) => ({
-      id: p.id,
-      label: p.label,
-      configured: !!process.env[p.configKey],
-    })),
-  );
+  return res.json(PROVIDERS.map((p) => ({ id: p.id, label: p.label, configured: !!process.env[p.configKey] })));
 });
 
 export default router;

@@ -51,7 +51,7 @@ export default function ProjectDetail({ id }: { id: string }) {
       const urls: Record<string, string> = {};
       for (const asset of (a ?? [])) {
         try {
-          const { url } = await api.getAssetSignedUrl(asset.storage_path);
+          const { url } = await api.getAssetSignedUrl(asset.storage_path, clientId);
           urls[asset.kind] = url;
         } catch { /* ignore */ }
       }
@@ -71,7 +71,7 @@ export default function ProjectDetail({ id }: { id: string }) {
 
   useEffect(() => {
     if (status?.status === "succeeded" && status.outputPath) {
-      api.getRenderSignedUrl(status.outputPath).then((r) => setVideoUrl(r.url));
+      api.getRenderSignedUrl(status.outputPath, clientId).then((r) => setVideoUrl(r.url));
       supabase.from("projects").select("*").eq("id", id).single()
         .then(({ data }) => setProject(data as ProjectRow));
     }
@@ -80,8 +80,7 @@ export default function ProjectDetail({ id }: { id: string }) {
   async function handleRetry(provider: string) {
     try {
       await api.retryRender({ clientId, projectId: id, provider });
-      toast.success(`Switched to ${provider}. Re-submitting…`);
-      await api.startRender({ clientId, projectId: id });
+      toast.success(`Queued on ${provider} — rendering…`);
       window.location.reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Retry failed");

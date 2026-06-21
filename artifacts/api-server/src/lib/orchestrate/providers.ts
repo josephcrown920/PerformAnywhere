@@ -235,6 +235,7 @@ export const imageAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
 };
 
 // ──────────────── VIDEO ────────────────
+
 async function falQueueWait(model: string, payload: Record<string, unknown>, key: string): Promise<Record<string, unknown>> {
   const submit = await fetch(`https://queue.fal.run/${model}`, {
     method: "POST",
@@ -255,19 +256,49 @@ async function falQueueWait(model: string, payload: Record<string, unknown>, key
     }
     if (sj.status === "FAILED") throw new Error(`fal failed: ${JSON.stringify(sj)}`);
   }
-  throw new Error("fal timeout");
+  throw new Error("fal timeout after 10 minutes");
+}
+
+async function klingJwt(ak: string, sk: string): Promise<string> {
+  const b64url = (input: Uint8Array | string) => {
+    const bytes = typeof input === "string" ? new TextEncoder().encode(input) : input;
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  };
+  const now = Math.floor(Date.now() / 1000);
+  const head = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const pay = b64url(JSON.stringify({ iss: ak, exp: now + 1800, nbf: now - 5 }));
+  const ck = await crypto.subtle.importKey("raw", new TextEncoder().encode(sk), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", ck, new TextEncoder().encode(`${head}.${pay}`));
+  return `${head}.${pay}.${b64url(new Uint8Array(sig))}`;
+}
+
+function klingModelName(model: string): { model_name: string; mode: string } {
+  const isPro = model.includes("pro");
+  const isV2 = model.includes("v2") || model.includes("2-");
+  const isV15 = model.includes("v1-5") || model.includes("1-5");
+  const model_name = isV2 ? "kling-v2" : isV15 ? "kling-v1-5" : "kling-v1-6";
+  return { model_name, mode: isPro ? "pro" : "std" };
 }
 
 export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterResult>> = {
   fal: async ({ model, prompt, options = {} }) => {
     const key = env("FAL_KEY");
     if (!key) throw new ProviderUnconfigured("fal");
-    const payload: Record<string, unknown> = { prompt, duration: options.duration ?? 5, aspect_ratio: options.aspectRatio ?? "16:9" };
+    const payload: Record<string, unknown> = {
+      prompt,
+      duration: options.duration ?? 5,
+      aspect_ratio: options.aspectRatio ?? "16:9",
+    };
     if (options.imageUrl) payload.image_url = options.imageUrl;
+    if (options.videoUrl) payload.video_url = options.videoUrl;
     if (options.negativePrompt) payload.negative_prompt = options.negativePrompt;
     const j = await falQueueWait(model, payload, key);
-    const url = (j.video as { url?: string })?.url ?? (j.output as { url?: string })?.url ?? (Array.isArray(j.output) ? (j.output as string[])[0] : undefined);
-    if (!url) throw new Error("fal video: no url");
+    const url = (j.video as { url?: string })?.url
+      ?? (j.output as { url?: string })?.url
+      ?? (Array.isArray(j.output) ? (j.output as string[])[0] : undefined);
+    if (!url) throw new Error(`fal video: no url in response: ${JSON.stringify(j).slice(0, 300)}`);
     return { provider: "fal", model, output_url: url, raw: j };
   },
 
@@ -291,32 +322,27 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
     const sk = env("KLING_SECRET_KEY");
     if (!ak || !sk) throw new ProviderUnconfigured("kling");
 
-    const b64url = (input: Uint8Array | string) => {
-      const bytes = typeof input === "string" ? new TextEncoder().encode(input) : input;
-      let bin = "";
-      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-      return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-    };
-    const now = Math.floor(Date.now() / 1000);
-    const head = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-    const pay = b64url(JSON.stringify({ iss: ak, exp: now + 1800, nbf: now - 5 }));
-    const ck = await crypto.subtle.importKey("raw", new TextEncoder().encode(sk), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    const sig = await crypto.subtle.sign("HMAC", ck, new TextEncoder().encode(`${head}.${pay}`));
-    const token = `${head}.${pay}.${b64url(new Uint8Array(sig))}`;
+    const token = await klingJwt(ak, sk);
+    const { model_name, mode } = klingModelName(model);
 
-    const isI2V = Boolean(options.imageUrl);
-    const endpoint = isI2V ? "image2video" : "text2video";
+    const hasImage = Boolean(options.imageUrl);
+    const endpoint = hasImage ? "image2video" : "text2video";
+
     const body: Record<string, unknown> = {
-      model_name: "kling-v1-6",
-      mode: model.includes("pro") ? "pro" : "std",
+      model_name,
+      mode,
       duration: String(options.duration ?? 5),
-      prompt: prompt.slice(0, 2500),
+      prompt: String(prompt).slice(0, 2500),
       cfg_scale: 0.5,
     };
-    if (isI2V) body.image = options.imageUrl;
-    else body.aspect_ratio = options.aspectRatio ?? "16:9";
+    if (hasImage) {
+      body.image = options.imageUrl;
+    } else {
+      body.aspect_ratio = options.aspectRatio ?? "16:9";
+    }
 
-    const submit = await fetch(`https://api-singapore.klingai.com/v1/videos/${endpoint}`, {
+    const BASE = "https://api-singapore.klingai.com/v1/videos";
+    const submit = await fetch(`${BASE}/${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
@@ -324,23 +350,59 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
     const stext = await submit.text();
     if (!submit.ok) throw new Error(`kling submit ${submit.status}: ${stext}`);
     const sj = JSON.parse(stext) as { code: number; message: string; data: { task_id: string } };
-    if (sj.code !== 0) throw new Error(`kling ${sj.code}: ${sj.message}`);
+    if (sj.code !== 0) throw new Error(`kling error ${sj.code}: ${sj.message}`);
     const taskId = sj.data.task_id;
 
     for (let i = 0; i < 120; i++) {
       await new Promise((r) => setTimeout(r, 5000));
-      const p = await fetch(`https://api-singapore.klingai.com/v1/videos/${endpoint}/${taskId}`, {
+      const p = await fetch(`${BASE}/${endpoint}/${taskId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const pj = await p.json() as { data: { task_status: string; task_status_msg: string; task_result: { videos: { url: string }[] } } };
+      if (!p.ok) continue;
+      const pj = await p.json() as {
+        data: { task_status: string; task_status_msg: string; task_result: { videos: { url: string }[] } };
+      };
       if (pj.data?.task_status === "succeed") {
         const url = pj.data.task_result?.videos?.[0]?.url;
-        if (!url) throw new Error("kling: no video url");
+        if (!url) throw new Error("kling: task succeeded but no video url");
         return { provider: "kling", model, output_url: url, raw: pj };
       }
-      if (pj.data?.task_status === "failed") throw new Error(`kling failed: ${pj.data.task_status_msg}`);
+      if (pj.data?.task_status === "failed") {
+        throw new Error(`kling generation failed: ${pj.data.task_status_msg || "unknown reason"}`);
+      }
     }
-    throw new Error("kling timeout");
+    throw new Error("kling timeout after 10 minutes");
+  },
+
+  // Hailuo (MiniMax) via fal.ai
+  hailuo: async ({ prompt, options = {} }) => {
+    const key = env("FAL_KEY");
+    if (!key) throw new ProviderUnconfigured("hailuo");
+    const model = "fal-ai/minimax/video-01";
+    const payload: Record<string, unknown> = { prompt };
+    if (options.imageUrl) payload.first_frame_image = options.imageUrl;
+    const j = await falQueueWait(model, payload, key);
+    const url = (j.video as { url?: string })?.url;
+    if (!url) throw new Error(`hailuo: no url in response: ${JSON.stringify(j).slice(0, 300)}`);
+    return { provider: "hailuo", model, output_url: url, raw: j };
+  },
+
+  // Runway Gen-4 via fal.ai
+  runway: async ({ prompt, options = {} }) => {
+    const key = env("FAL_KEY");
+    if (!key) throw new ProviderUnconfigured("runway");
+    const model = "fal-ai/runway-gen4/turbo/image-to-video";
+    if (!options.imageUrl) throw new Error("runway: imageUrl (still frame) required");
+    const payload: Record<string, unknown> = {
+      prompt,
+      image_url: options.imageUrl,
+      duration: options.duration ?? 5,
+      ratio: options.aspectRatio ?? "16:9",
+    };
+    const j = await falQueueWait(model, payload, key);
+    const url = (j.video as { url?: string })?.url;
+    if (!url) throw new Error(`runway: no url in response: ${JSON.stringify(j).slice(0, 300)}`);
+    return { provider: "runway", model, output_url: url, raw: j };
   },
 };
 

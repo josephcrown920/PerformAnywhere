@@ -104,11 +104,11 @@ export const api = {
   retryRender: (body: { clientId: string; projectId: string; provider: string }) =>
     post<{ ok: boolean }>("/render/retry", body),
 
-  getRenderSignedUrl: (path: string) =>
-    post<SignedUrlResult>("/render/signed-url/render", { path }),
+  getRenderSignedUrl: (path: string, clientId?: string) =>
+    post<SignedUrlResult>("/render/signed-url/render", { path, clientId }),
 
-  getAssetSignedUrl: (path: string) =>
-    post<SignedUrlResult>("/render/signed-url/asset", { path }),
+  getAssetSignedUrl: (path: string, clientId?: string) =>
+    post<SignedUrlResult>("/render/signed-url/asset", { path, clientId }),
 
   providerStatus: () =>
     get<ProviderStatus[]>("/render/providers"),
