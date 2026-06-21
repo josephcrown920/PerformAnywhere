@@ -341,7 +341,7 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
       body.aspect_ratio = options.aspectRatio ?? "16:9";
     }
 
-    const BASE = "https://api-singapore.klingai.com/v1/videos";
+    const BASE = "https://api.klingai.com/v1/videos";
     const submit = await fetch(`${BASE}/${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },

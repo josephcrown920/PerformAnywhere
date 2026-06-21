@@ -145,52 +145,25 @@ async function startRenderJob(opts: {
 
     const { videoAdapters } = await import("../lib/orchestrate/providers.js");
 
-    // Determine primary provider from the chosen model
-    const primaryFromModel = chosenModel === "hailuo" ? "hailuo"
+    // Use the chosen model directly — no fallback
+    const provider = preferredProvider ?? (
+      chosenModel === "hailuo" ? "hailuo"
       : chosenModel === "fal" ? "fal"
-      : "kling";
+      : "kling"
+    );
 
-    const primaryProvider = preferredProvider ?? primaryFromModel;
+    const adapterModel = provider === "kling"
+      ? (chosenModel.startsWith("kling") ? chosenModel : "kling-v1-6-std")
+      : provider === "hailuo" ? "hailuo"
+      : "fal-ai/kling-video/v1.6/standard/image-to-video";
 
-    // Provider priority: preferred/chosen → others as fallback
-    const providerOrder = [
-      primaryProvider,
-      ...["kling", "hailuo", "fal"].filter((p) => p !== primaryProvider),
-    ];
+    const adapter = videoAdapters[provider];
+    if (!adapter) throw new Error(`Provider "${provider}" is not configured`);
 
-    // Model string to pass to each adapter
-    const modelForProvider = (p: string) => {
-      if (p === "kling") return chosenModel.startsWith("kling") ? chosenModel : "kling-v1-6-std";
-      if (p === "hailuo") return "hailuo";
-      return "fal-ai/kling-video/v1.6/standard/image-to-video";
-    };
+    const options: Record<string, unknown> = { duration: 5 };
+    if (identityUrl) options.imageUrl = identityUrl;
 
-    let lastError = "no provider succeeded";
-    let result: { provider: string; model: string; output_url?: string; raw?: unknown } | null = null;
-
-    for (const provider of providerOrder) {
-      const adapter = videoAdapters[provider];
-      if (!adapter) continue;
-
-      try {
-        const adapterModel = modelForProvider(provider);
-
-        const options: Record<string, unknown> = { duration: 5 };
-        // Use the identity photo (a real still image) as the reference — never pass a video as imageUrl
-        if (identityUrl) options.imageUrl = identityUrl;
-
-        result = await adapter({ model: adapterModel, prompt, options });
-        break;
-      } catch (err) {
-        lastError = err instanceof Error ? err.message : String(err);
-        console.error(`[render] ${provider} failed:`, lastError);
-        // Continue to next provider
-      }
-    }
-
-    if (!result || !result.output_url) {
-      throw new Error(lastError);
-    }
+    const result = await adapter({ model: adapterModel, prompt, options });
 
     // Download and store the rendered video
     const outputPath = `${clientId}/${projectId}/render.mp4`;
