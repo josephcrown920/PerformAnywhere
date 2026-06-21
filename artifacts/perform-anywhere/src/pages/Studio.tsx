@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { api } from "@/lib/api";
@@ -41,6 +41,17 @@ export default function Studio() {
   const [enhanced, setEnhanced] = useState("");
   const [enhancing, setEnhancing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Prevent browser from navigating if user accidentally drops a file outside a dropzone
+  useEffect(() => {
+    const prevent = (e: DragEvent) => e.preventDefault();
+    window.addEventListener("dragover", prevent);
+    window.addEventListener("drop", prevent);
+    return () => {
+      window.removeEventListener("dragover", prevent);
+      window.removeEventListener("drop", prevent);
+    };
+  }, []);
 
   function setFile(kind: AssetKind, f: File | null) {
     setFiles((prev) => {
@@ -390,7 +401,10 @@ function Dropzone({ label, hint, accept, file, onChange, required, badge, kind }
       }}
       onDrop={handleDrop}
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-      onDragLeave={() => setDragging(false)}
+      onDragLeave={(e) => {
+        // Only clear when the pointer actually leaves this container — not when entering a child element
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false);
+      }}
     >
       <div className="flex items-center justify-between px-4 pt-4 pb-3">
         <div className="flex items-center gap-2.5">
