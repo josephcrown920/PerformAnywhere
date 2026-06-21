@@ -39,10 +39,13 @@ function buildPrompt(opts: {
 // ─── POST /api/render/start ───────────────────────────────────────────────────
 
 router.post("/start", async (req, res) => {
-  const { clientId: rawCid, projectId } = req.body as { clientId: unknown; projectId: string };
+  const { clientId: rawCid, projectId, model: requestedModel } = req.body as { clientId: unknown; projectId: string; model?: string };
   let clientId: string;
   try { clientId = assertClientId(rawCid); } catch { return res.status(400).json({ error: "invalid_client_id" }); }
   if (!projectId) return res.status(400).json({ error: "projectId required" });
+
+  const ALLOWED_MODELS = ["kling-v1-6-std", "kling-v1-6-pro", "hailuo", "fal"];
+  const model = requestedModel && ALLOWED_MODELS.includes(requestedModel) ? requestedModel : "kling-v1-6-std";
 
   const sb = createAnonClient();
 
@@ -102,6 +105,7 @@ router.post("/start", async (req, res) => {
     prompt,
     assets: assets ?? [],
     sb,
+    model,
   }).catch((err) => {
     console.error("[render] unhandled background error", err);
   });
@@ -119,8 +123,10 @@ async function startRenderJob(opts: {
   assets: Asset[];
   sb: ReturnType<typeof createAnonClient>;
   preferredProvider?: string;
+  model?: string;
 }) {
-  const { projectId, clientId, renderId, prompt, assets, sb, preferredProvider } = opts;
+  const { projectId, clientId, renderId, prompt, assets, sb, preferredProvider, model: requestModel } = opts;
+  const chosenModel = requestModel ?? "kling-v1-6-std";
 
   const updateStatus = (status: string, extra: Record<string, unknown> = {}) =>
     Promise.all([
@@ -139,10 +145,25 @@ async function startRenderJob(opts: {
 
     const { videoAdapters } = await import("../lib/orchestrate/providers.js");
 
-    // Provider priority: preferred (from retry) → kling → hailuo → fal
-    const providerOrder = preferredProvider
-      ? [preferredProvider, ...["kling", "hailuo", "fal"].filter((p) => p !== preferredProvider)]
-      : ["kling", "hailuo", "fal"];
+    // Determine primary provider from the chosen model
+    const primaryFromModel = chosenModel === "hailuo" ? "hailuo"
+      : chosenModel === "fal" ? "fal"
+      : "kling";
+
+    const primaryProvider = preferredProvider ?? primaryFromModel;
+
+    // Provider priority: preferred/chosen → others as fallback
+    const providerOrder = [
+      primaryProvider,
+      ...["kling", "hailuo", "fal"].filter((p) => p !== primaryProvider),
+    ];
+
+    // Model string to pass to each adapter
+    const modelForProvider = (p: string) => {
+      if (p === "kling") return chosenModel.startsWith("kling") ? chosenModel : "kling-v1-6-std";
+      if (p === "hailuo") return "hailuo";
+      return "fal-ai/kling-video/v1.6/standard/image-to-video";
+    };
 
     let lastError = "no provider succeeded";
     let result: { provider: string; model: string; output_url?: string; raw?: unknown } | null = null;
@@ -152,15 +173,13 @@ async function startRenderJob(opts: {
       if (!adapter) continue;
 
       try {
-        const model = provider === "kling" ? "kling-v1-6-std"
-          : provider === "hailuo" ? "hailuo"
-          : "fal-ai/kling-video/v1.6/standard/image-to-video";
+        const adapterModel = modelForProvider(provider);
 
         const options: Record<string, unknown> = { duration: 5 };
         // Use the identity photo (a real still image) as the reference — never pass a video as imageUrl
         if (identityUrl) options.imageUrl = identityUrl;
 
-        result = await adapter({ model, prompt, options });
+        result = await adapter({ model: adapterModel, prompt, options });
         break;
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err);

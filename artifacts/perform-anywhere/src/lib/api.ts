@@ -95,7 +95,7 @@ export const api = {
   initPaystack: (body: { clientId: string; amountNaira: number; email: string }) =>
     post<PaystackInitResult>("/orchestrate/paystack", body),
 
-  startRender: (body: { clientId: string; projectId: string }) =>
+  startRender: (body: { clientId: string; projectId: string; model?: string }) =>
     post<StartRenderResult>("/render/start", body),
 
   pollRender: (body: { clientId: string; projectId: string }) =>
