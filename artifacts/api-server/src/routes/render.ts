@@ -179,7 +179,12 @@ async function startRenderJob(opts: {
       }
     }
 
-    if (!result) throw new Error(lastError);
+    if (!result) {
+      const creditErr = /1102|balance|credit|insufficient|402/i.test(lastError);
+      throw new Error(creditErr
+        ? "All video providers need credits. Add $5 to replicate.com/account/billing (WAN 2.1) or top up klingai.com. Raw: " + lastError.slice(0, 120)
+        : lastError);
+    }
 
     // Download and store the rendered video
     const outputPath = `${clientId}/${projectId}/render.mp4`;
