@@ -67,19 +67,30 @@ export default function Studio() {
     (async () => {
       const text = loadDraftText();
       const fileRecords = await loadDraftFiles();
-      if (!text && fileRecords.length === 0) return;
 
-      if (text) {
+      // Only restore if there's actually something meaningful saved
+      const hasTextContent = text && (
+        (text.scenePrompt && text.scenePrompt.trim()) ||
+        (text.stylePrompt && text.stylePrompt.trim()) ||
+        (text.customPrompt && text.customPrompt.trim()) ||
+        (text.enhanced && text.enhanced.trim()) ||
+        (text.title && text.title !== "Untitled performance")
+      );
+      const hasFiles = fileRecords.length > 0;
+
+      if (!hasTextContent && !hasFiles) return;
+
+      if (hasTextContent && text) {
         setTitle(text.title);
         setSelectedModel(text.selectedModel);
         setScenePrompt(text.scenePrompt);
         setStylePrompt(text.stylePrompt);
         setCustomPrompt(text.customPrompt);
         setEnhanced(text.enhanced);
-        setStep(text.step);
+        setStep(text.step ?? 1);
       }
 
-      if (fileRecords.length > 0) {
+      if (hasFiles) {
         const restored: Record<AssetKind, StagedFile | null> = {
           performance: null, identity: null, outfit: null, scene: null,
         };
@@ -97,8 +108,10 @@ export default function Studio() {
     })();
   }, []);
 
-  // ── Auto-save text state ─────────────────────────────────────────────────────
+  // ── Auto-save text state (only when there's real content) ────────────────────
   useEffect(() => {
+    const hasContent = scenePrompt.trim() || stylePrompt.trim() || customPrompt.trim() || enhanced.trim() || title !== "Untitled performance";
+    if (!hasContent) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       saveDraftText({ title, selectedModel, scenePrompt, stylePrompt, customPrompt, enhanced, step, savedAt: Date.now() });
