@@ -253,6 +253,44 @@ function fireWebhook(payload: Record<string, unknown>): void {
   }).catch((err) => console.warn("[webhook] delivery failed:", err?.message));
 }
 
+// ─── GET /api/render/public/:clientId/:projectId ─────────────────────────────
+// No API-key auth required — intentionally public for share links.
+// Only returns data for succeeded projects. Generates a 7-day signed URL.
+
+router.get("/public/:clientId/:projectId", async (req, res) => {
+  const { clientId, projectId } = req.params;
+  if (!clientId || !projectId) return res.status(400).json({ error: "missing params" });
+
+  const sb = createAnonClient();
+
+  const { data: project, error } = await sb
+    .from("projects")
+    .select("id,title,status,provider,selected_model,enhanced_prompt,scene_prompt,style_prompt,created_at,output_path")
+    .eq("id", projectId)
+    .eq("client_id", clientId)
+    .single();
+
+  if (error || !project) return res.status(404).json({ error: "not_found" });
+  if (project.status !== "succeeded" || !project.output_path)
+    return res.status(404).json({ error: "render_not_ready" });
+
+  const { data: signed } = await sb.storage
+    .from(RENDER_BUCKET)
+    .createSignedUrl(project.output_path, 7 * 24 * 60 * 60); // 7 days
+
+  if (!signed?.signedUrl) return res.status(500).json({ error: "could_not_sign" });
+
+  return res.json({
+    id: project.id,
+    title: project.title,
+    provider: project.provider,
+    model: project.selected_model,
+    prompt: project.enhanced_prompt || project.scene_prompt || project.style_prompt || null,
+    created_at: project.created_at,
+    videoUrl: signed.signedUrl,
+  });
+});
+
 // ─── POST /api/render/poll ────────────────────────────────────────────────────
 
 router.post("/poll", async (req, res) => {

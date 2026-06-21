@@ -113,6 +113,12 @@ export const api = {
   providerStatus: () =>
     get<ProviderStatus[]>("/render/providers"),
 
+  getPublicRender: (clientId: string, projectId: string) =>
+    get<{
+      id: string; title: string; provider: string; model: string | null;
+      prompt: string | null; created_at: string; videoUrl: string;
+    }>(`/render/public/${encodeURIComponent(clientId)}/${encodeURIComponent(projectId)}`),
+
   enhancePrompt: (body: {
     scenePrompt: string;
     stylePrompt: string;
