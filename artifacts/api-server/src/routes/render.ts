@@ -67,8 +67,7 @@ router.post("/start", async (req, res) => {
     .select("kind,storage_path")
     .eq("project_id", projectId);
 
-  const performance = (assets ?? []).find((a) => a.kind === "performance");
-  if (!performance) return res.status(400).json({ error: "performance_video_required" });
+  // Performance video is optional — generation works with just a prompt + optional identity photo
 
   await sb.from("projects").update({ status: "queued", error_message: null }).eq("id", projectId);
 

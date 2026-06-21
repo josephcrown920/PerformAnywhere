@@ -196,7 +196,7 @@ export default function Studio() {
     }
   }
 
-  const canGoNext   = step === 1 ? (!!files.performance && !!files.identity) : true;
+  const canGoNext   = step === 1 ? true : true;
   const activeModel = MODELS.find((m) => m.id === selectedModel) ?? MODELS[0];
 
   return (
@@ -269,12 +269,12 @@ export default function Studio() {
               />
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <Dropzone kind="performance" label="Performance video" hint="≤ 200 MB · MP4, MOV, WebM" accept="video/*" file={files.performance} onChange={(f) => setFile("performance", f)} required badge="01" />
-              <Dropzone kind="identity"    label="Identity photo"    hint="≤ 15 MB · JPG, PNG"        accept="image/*" file={files.identity}    onChange={(f) => setFile("identity", f)}    required badge="02" />
+              <Dropzone kind="performance" label="Performance video" hint="Optional · MP4, MOV, WebM" accept="video/*" file={files.performance} onChange={(f) => setFile("performance", f)} badge="01" />
+              <Dropzone kind="identity"    label="Identity photo"    hint="Optional · JPG, PNG · used for image-to-video" accept="image/*" file={files.identity} onChange={(f) => setFile("identity", f)} badge="02" />
               <Dropzone kind="outfit"      label="Outfit reference"  hint="Optional · clothing"        accept="image/*" file={files.outfit}      onChange={(f) => setFile("outfit", f)}             badge="03" />
               <Dropzone kind="scene"       label="Scene reference"   hint="Optional · environment"     accept="image/*" file={files.scene}       onChange={(f) => setFile("scene", f)}              badge="04" />
             </div>
-            <p className="text-xs text-white/30">Performance video and identity photo are required to continue.</p>
+            <p className="text-xs text-white/30">All assets are optional — you can render with just a prompt, or add a photo for image-to-video.</p>
           </div>
         )}
 
