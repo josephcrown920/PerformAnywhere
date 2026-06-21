@@ -51,11 +51,21 @@ export const PRICING = {
   audio: { perRequest: 75 },
 } as const;
 
+const FREE_PROVIDER_IDS = new Set(["groq", "gemini", "cohere", "pollinations", "veo"]);
+
 export function estimateCredits(modality: Modality, options: Record<string, unknown> = {}): number {
+  // Free-tier providers cost 0 credits — pass { provider } to get accurate estimate
+  const provider = options.provider as string | undefined;
+  if (provider && FREE_PROVIDER_IDS.has(provider)) return 0;
   switch (modality) {
     case "text":  return PRICING.text.perRequest;
     case "image": return PRICING.image.perImage * Math.max(1, Number(options.n ?? 1));
     case "video": return PRICING.video.perSecond * Math.max(1, Number(options.duration ?? 5));
     case "audio": return PRICING.audio.perRequest;
   }
+}
+
+/** Returns true if the model entry is free (no credits needed) */
+export function isModelFree(model: ProviderModel): boolean {
+  return !!model.free || FREE_PROVIDER_IDS.has(model.provider);
 }

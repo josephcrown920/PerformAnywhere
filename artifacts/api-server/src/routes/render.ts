@@ -135,6 +135,11 @@ async function startRenderJob(opts: {
         : Promise.resolve(),
     ]);
 
+  // Heartbeat: update DB every 45s so stuck-job detector doesn't kill active renders
+  const heartbeat = setInterval(() => {
+    sb.from("projects").update({ status: "running" }).eq("id", projectId).then(() => {});
+  }, 45_000);
+
   try {
     await updateStatus("running");
 
@@ -216,6 +221,8 @@ async function startRenderJob(opts: {
     ]);
 
     fireWebhook({ event: "render.failed", projectId, clientId, error: msg });
+  } finally {
+    clearInterval(heartbeat);
   }
 }
 
@@ -325,7 +332,7 @@ router.post("/retry", async (req, res) => {
   let clientId: string;
   try { clientId = assertClientId(rawCid); } catch { return res.status(400).json({ error: "invalid_client_id" }); }
 
-  const ALLOWED = ["kling", "hailuo", "fal", "runway"];
+  const ALLOWED = ["kling", "wan", "veo", "sora", "huggingface"];
   if (!ALLOWED.includes(provider)) return res.status(400).json({ error: "invalid_provider" });
 
   const sb = createAnonClient();

@@ -372,7 +372,7 @@ export default function ProjectDetail({ id }: { id: string }) {
               {(project.status === "failed" || project.status === "succeeded") && (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs text-white/30">Try another model:</span>
-                  {(["kling", "hailuo", "fal"] as const)
+                  {(["kling", "wan", "veo"] as const)
                     .filter((p) => p !== project.provider)
                     .map((p) => (
                       <button

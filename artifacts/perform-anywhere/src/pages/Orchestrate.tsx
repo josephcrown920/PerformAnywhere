@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { CATALOG, estimateCredits, type Modality } from "@/lib/catalog";
+import { CATALOG, estimateCredits, isModelFree, type Modality } from "@/lib/catalog";
 import { api } from "@/lib/api";
 import { getClientId } from "@/lib/client-id";
 import { Loader2, Coins, Zap, ChevronRight } from "lucide-react";
@@ -39,7 +39,9 @@ export default function Orchestrate() {
     enabled: !!clientId,
   });
 
-  const cost = estimateCredits(modality, modality === "video" ? { duration } : {});
+  const selectedModel = CATALOG[modality].find((m) => m.id === modelId) ?? CATALOG[modality][0];
+  const free = isModelFree(selectedModel);
+  const cost = free ? 0 : estimateCredits(modality, modality === "video" ? { duration } : {});
   const balance = wallet.data?.balance ?? 0;
 
   const run = useMutation({
