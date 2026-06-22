@@ -1,1 +1,2 @@
 - [Aurora generation provider model](aurora-generation-providers.md) — why video/audio fail without keys, and the free-model/fallback lists that must stay in sync across client+server.
+- [Aurora Supabase backend never provisioned](aurora-supabase-schema.md) — empty DB (42P01); full schema reconstructed in api-server/migrations/000_init_schema.sql; user must run it (agent has only anon key); anon-key access + credit-minting security debt.
