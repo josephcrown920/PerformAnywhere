@@ -166,6 +166,7 @@ async function startRenderJob(opts: {
     if (identityUrl) options.imageUrl = identityUrl;
 
     let lastError = "no provider succeeded";
+    let lastConfiguredError = ""; // error from a provider that actually had an API key
     let attemptedConfigured = false; // true once a provider with a key actually ran
     type VideoResult = { provider: string; model: string; output_url: string; raw?: unknown };
     let result: VideoResult | null = null;
@@ -182,7 +183,10 @@ async function startRenderJob(opts: {
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         // provider_unconfigured:<name> means there is no API key — not a real attempt
-        if (!errMsg.startsWith("provider_unconfigured:")) attemptedConfigured = true;
+        if (!errMsg.startsWith("provider_unconfigured:")) {
+          attemptedConfigured = true;
+          lastConfiguredError = errMsg; // keep the real error; trailing unconfigured providers must not mask it
+        }
         lastError = errMsg;
         console.error(`[render] ${p} failed:`, errMsg);
       }
@@ -195,10 +199,13 @@ async function startRenderJob(opts: {
           "No video provider is configured. Video generation needs an API key — add REPLICATE_API_TOKEN (easiest, powers WAN 2.1), or a Kling / Google Gemini (Veo) / HuggingFace key in Secrets. Text and image generation work without any keys.",
         );
       }
-      const creditErr = /1102|balance|credit|insufficient|402/i.test(lastError);
+      // Prefer the error from a provider that actually had a key — trailing
+      // unconfigured providers must not mask the real (actionable) failure.
+      const meaningful = lastConfiguredError || lastError || "no provider succeeded";
+      const creditErr = /1102|balance|credit|insufficient|402|billing|quota/i.test(meaningful);
       throw new Error(creditErr
-        ? "Your video provider is out of credits. Top up Replicate (replicate.com/account/billing) or Kling (klingai.com). Raw: " + lastError.slice(0, 120)
-        : lastError);
+        ? "Video generation needs a funded provider. The cheapest option is already wired up: add a small balance to Replicate at replicate.com/account/billing (your API token is already set, so video will work automatically once funded). Veo also works but requires Google Cloud billing. Details: " + meaningful.slice(0, 160)
+        : meaningful);
     }
 
     // Download and store the rendered video
