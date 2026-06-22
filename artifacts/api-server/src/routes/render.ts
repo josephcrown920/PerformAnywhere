@@ -86,13 +86,14 @@ router.post("/start", async (req, res) => {
     hasScene: !!(assets ?? []).find((a) => a.kind === "scene"),
   });
 
-  const { data: render } = await sb.from("project_renders").insert({
+  const { data: render, error: renderInsErr } = await sb.from("project_renders").insert({
     project_id: projectId,
     client_id: clientId,
     provider: "kling",
     status: "queued",
     prompt,
   }).select("id").single();
+  if (renderInsErr) console.error("[render] project_renders insert failed (start):", renderInsErr.message);
 
   const renderId = (render as { id?: string } | null)?.id;
 
@@ -212,21 +213,23 @@ async function startRenderJob(opts: {
     );
     if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
 
-    await Promise.all([
-      sb.from("projects").update({
+    const { error: projUpdErr } = await sb.from("projects").update({
+      status: "succeeded",
+      output_path: outputPath,
+      provider: result.provider,
+      error_message: null,
+    }).eq("id", projectId);
+    // If we can't persist the result, the render is effectively lost — surface it
+    // instead of reporting a false success (this is what made schema drift silent).
+    if (projUpdErr) throw new Error(`Failed to save render result: ${projUpdErr.message}`);
+
+    if (renderId) {
+      await sb.from("project_renders").update({
         status: "succeeded",
         output_path: outputPath,
-        provider: result.provider,
-        error_message: null,
-      }).eq("id", projectId),
-      renderId
-        ? sb.from("project_renders").update({
-            status: "succeeded",
-            output_path: outputPath,
-            provider_task_id: result.raw ? JSON.stringify(result.raw).slice(0, 200) : null,
-          }).eq("id", renderId)
-        : Promise.resolve(),
-    ]);
+        provider_task_id: result.raw ? JSON.stringify(result.raw).slice(0, 200) : null,
+      }).eq("id", renderId);
+    }
 
     fireWebhook({ event: "render.succeeded", projectId, clientId, provider: result.provider, outputPath });
   } catch (err) {
@@ -386,13 +389,14 @@ router.post("/retry", async (req, res) => {
 
   await sb.from("projects").update({ status: "queued", provider, error_message: null }).eq("id", projectId);
 
-  const { data: render } = await sb.from("project_renders").insert({
+  const { data: render, error: retryInsErr } = await sb.from("project_renders").insert({
     project_id: projectId,
     client_id: clientId,
     provider,
     status: "queued",
     prompt,
   }).select("id").single();
+  if (retryInsErr) console.error("[render] project_renders insert failed (retry):", retryInsErr.message);
 
   startRenderJob({
     projectId,
