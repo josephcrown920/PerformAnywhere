@@ -2,7 +2,7 @@ import { Router } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createAnonClient, assertClientId } from "../lib/supabase.js";
 import { runOrchestrated } from "../lib/orchestrate/run.js";
-import { estimateCredits, FREE_PROVIDERS, type Modality } from "../lib/orchestrate/catalog.js";
+import { estimateCredits, isModelFree, type Modality } from "../lib/orchestrate/catalog.js";
 
 const router = Router();
 
@@ -61,7 +61,7 @@ router.post("/run", async (req, res) => {
 
   const sb = createAnonClient();
   const primaryProvider = modelId.split("/")[0];
-  const isFree = FREE_PROVIDERS.has(primaryProvider);
+  const isFree = isModelFree(modelId);
   const credits = isFree ? 0 : estimateCredits(modality, options);
 
   // Create pending generation row
@@ -120,14 +120,20 @@ router.post("/run", async (req, res) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await sb.from("generations").update({ status: "failed", error_message: msg }).eq("id", gen.id);
-    // Refund credits
-    await sb.rpc("grant_credits", {
-      _client_id: clientId,
-      _amount: credits,
-      _reason: "refund",
-      _description: `Refund for failed generation ${gen.id}`,
-      _purchase_id: null,
-    }).catch(() => {});
+    // Refund credits (best-effort) — only if we actually charged for this run
+    if (!isFree && credits > 0) {
+      try {
+        await sb.rpc("grant_credits", {
+          _client_id: clientId,
+          _amount: credits,
+          _reason: "refund",
+          _description: `Refund for failed generation ${gen.id}`,
+          _purchase_id: null,
+        });
+      } catch {
+        /* best-effort refund; failure to refund must not mask the original error */
+      }
+    }
     return res.status(500).json({ error: msg });
   }
 });

@@ -1,5 +1,5 @@
 import { ADAPTERS, ProviderUnconfigured, type AdapterResult } from "./providers.js";
-import { CATALOG_DEFAULT_FALLBACKS, type Modality } from "./catalog.js";
+import { CATALOG_DEFAULT_FALLBACKS, FALLBACK_MODELS, type Modality } from "./catalog.js";
 
 type RunOptions = {
   modality: Modality;
@@ -41,7 +41,7 @@ export async function runOrchestrated(opts: RunOptions): Promise<RunResult> {
       continue;
     }
     try {
-      const modelForAdapter = prov === primaryProvider ? model : prov;
+      const modelForAdapter = prov === primaryProvider ? model : (FALLBACK_MODELS[modality]?.[prov] ?? prov);
       const result = await adapter({ model: modelForAdapter, prompt, options });
       return { ...result, duration_ms: Date.now() - start, attempts };
     } catch (err) {
