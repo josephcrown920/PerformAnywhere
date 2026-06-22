@@ -154,7 +154,7 @@ async function startRenderJob(opts: {
     const primaryProvider = preferredProvider ?? "kling";
     const providerOrder = [
       primaryProvider,
-      ...["kling", "wan", "veo", "sora", "huggingface"].filter((p) => p !== primaryProvider),
+      ...["runpod", "kling", "wan", "veo", "sora", "huggingface"].filter((p) => p !== primaryProvider),
     ];
 
     const modelForProvider = (p: string) => {
@@ -196,7 +196,7 @@ async function startRenderJob(opts: {
       // No provider even had an API key configured — give an honest, actionable message
       if (!attemptedConfigured) {
         throw new Error(
-          "No video provider is configured. Video generation needs an API key — add REPLICATE_API_TOKEN (easiest, powers WAN 2.1), or a Kling / Google Gemini (Veo) / HuggingFace key in Secrets. Text and image generation work without any keys.",
+          "No video provider is configured. Video generation needs an API key — add RUNPOD_API_KEY + RUNPOD_ENDPOINT_ID (your own RunPod endpoint), REPLICATE_API_TOKEN (powers WAN 2.1), or a Kling / Google Gemini (Veo) / HuggingFace key in Secrets. Text and image generation work without any keys.",
         );
       }
       // Prefer the error from a provider that actually had a key — trailing

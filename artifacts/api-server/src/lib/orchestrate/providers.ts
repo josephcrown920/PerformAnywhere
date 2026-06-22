@@ -282,7 +282,86 @@ function klingModelName(model: string): { model_name: string; mode: string } {
   return { model_name, mode: isPro ? "pro" : "std" };
 }
 
+/**
+ * RunPod serverless workers return results in many shapes depending on the
+ * deployed model. Walk the output and return the first usable video — an
+ * http(s) URL, a data: URI, or a raw base64 blob (wrapped as a data URI).
+ */
+function extractMediaUrl(out: unknown, mime = "video/mp4"): string | null {
+  if (out == null) return null;
+  if (typeof out === "string") {
+    const s = out.trim();
+    if (/^https?:\/\//i.test(s)) return s;
+    if (s.startsWith("data:")) return s;
+    if (s.length > 256 && /^[A-Za-z0-9+/=\s]+$/.test(s)) return `data:${mime};base64,${s.replace(/\s+/g, "")}`;
+    return null;
+  }
+  if (Array.isArray(out)) {
+    for (const item of out) { const u = extractMediaUrl(item, mime); if (u) return u; }
+    return null;
+  }
+  if (typeof out === "object") {
+    const o = out as Record<string, unknown>;
+    for (const k of ["video_url", "videoUrl", "url", "output_url", "mp4", "video", "result", "output", "data", "s3_url", "signed_url", "media", "assets"]) {
+      if (k in o) { const u = extractMediaUrl(o[k], mime); if (u) return u; }
+    }
+    for (const k of ["video_base64", "base64", "b64", "mp4_base64", "base64_video"]) {
+      const v = o[k];
+      if (typeof v === "string" && v.length > 256) return v.startsWith("data:") ? v : `data:${mime};base64,${v.replace(/\s+/g, "")}`;
+    }
+  }
+  return null;
+}
+
 export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterResult>> = {
+  // RunPod Serverless — runs the user's OWN deployed video endpoint.
+  // Requires RUNPOD_API_KEY + RUNPOD_ENDPOINT_ID. The input payload shape is
+  // defined by the deployed worker, so we send a common default and merge any
+  // caller-supplied options.input; the result video is located flexibly.
+  runpod: async ({ prompt, options = {} }) => {
+    const key = env("RUNPOD_API_KEY");
+    const endpointId = env("RUNPOD_ENDPOINT_ID");
+    if (!key || !endpointId) throw new ProviderUnconfigured("runpod");
+
+    const BASE = `https://api.runpod.ai/v2/${endpointId}`;
+    const auth = { Authorization: `Bearer ${key}` };
+
+    const input: Record<string, unknown> = {
+      prompt: String(prompt).slice(0, 2500),
+      duration: options.duration ?? 5,
+      aspect_ratio: options.aspectRatio ?? "16:9",
+      ...((options.input as object) ?? {}),
+    };
+    if (options.imageUrl) input.image = options.imageUrl;
+
+    const submit = await fetch(`${BASE}/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...auth },
+      body: JSON.stringify({ input }),
+    });
+    const stext = await submit.text();
+    if (!submit.ok) throw new Error(`runpod submit ${submit.status}: ${stext.slice(0, 300)}`);
+    let job = JSON.parse(stext) as { id?: string; status?: string; output?: unknown; error?: unknown };
+    if (!job.id) throw new Error(`runpod: no job id in response: ${stext.slice(0, 200)}`);
+
+    // Poll up to ~15 min (serverless workers can cold-start)
+    const DONE = ["COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"];
+    for (let i = 0; i < 180 && !DONE.includes(job.status ?? ""); i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      const poll = await fetch(`${BASE}/status/${job.id}`, { headers: auth });
+      if (!poll.ok) continue;
+      job = await poll.json() as typeof job;
+    }
+    if (job.status !== "COMPLETED") {
+      const detail = job.error ? JSON.stringify(job.error).slice(0, 200) : (job.status ?? "no response");
+      throw new Error(`runpod ${job.status ?? "unknown"}: ${detail}`);
+    }
+
+    const url = extractMediaUrl(job.output);
+    if (!url) throw new Error(`runpod: job completed but no video found in output: ${JSON.stringify(job.output).slice(0, 300)}`);
+    return { provider: "runpod", model: endpointId, output_url: url, raw: job };
+  },
+
   fal: async ({ model, prompt, options = {} }) => {
     const key = env("FAL_KEY");
     if (!key) throw new ProviderUnconfigured("fal");
