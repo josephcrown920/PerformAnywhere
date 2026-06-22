@@ -8,9 +8,15 @@ description: How the Perform Anywhere (Aurora) AI app routes generations across 
 The app is `artifacts/perform-anywhere` (frontend) + `artifacts/api-server` (backend). Generations route through provider adapters with a fallback chain.
 
 ## Keyless capability asymmetry (the #1 "why doesn't it work" cause)
-- **Text and image** have a keyless fallback (`pollinations`), so they work with zero API keys / zero credits.
+- **Image** has a reliable keyless provider (`image.pollinations.ai`) — works with zero keys / zero credits, fast (sub-second). Keep this as the free image default.
+- **Text** only had a keyless provider (`text.pollinations.ai`), but that endpoint is unreliable: it's deprecating its free legacy GET API, exposes only ONE anonymous model (`openai-fast`, aliases incl. `openai`), and routinely returns 500/429/000 under load. Do NOT rely on it as the primary free text path. The reliable free text path is `gemini` (free Google AI Studio dev key) and `groq` (free key) — both already wired adapters, both in FREE_PROVIDERS so `credits_used=0`. No code change is needed to enable them; just set `GEMINI_API_KEY` / `GROQ_API_KEY`.
 - **Video and audio have NO keyless provider.** Every video adapter (fal, replicate, kling, hailuo, wan, runway, sora, veo, huggingface) and audio adapter (elevenlabs, replicate) throws `ProviderUnconfigured` ("provider_unconfigured:<name>") when its key is missing.
 - **Consequence:** video ("motion control" in user terms) and audio CANNOT generate until the user supplies at least one provider API key. This is configuration, not a code bug. Recommend `REPLICATE_API_TOKEN` (easiest — powers the `wan`/WAN 2.1 provider) or Kling / Gemini(Veo) / HuggingFace, since those are what the Studio render chain actually tries.
+
+## Free text keys: own-key, not the Replit AI integration
+The Replit AI Integrations Gemini proxy (`setupReplitAIIntegrations`) was blocked on this account by `awaiting_phone_verification`, so text uses the user's OWN free keys instead. Two gotchas worth remembering:
+- A consumer **Gemini app / Advanced subscription is NOT an API key.** The free developer key comes from Google AI Studio (`aistudio.google.com/apikey`) and is separate; users conflate the two. Groq free key: `console.groq.com/keys`.
+- The `gemini` text adapter calls the Google `generativelanguage` v1beta `generateContent` endpoint with `GEMINI_API_KEY`; valid free models include `gemini-2.5-flash`/`gemini-2.0-flash`. The `groq` adapter is OpenAI-compatible chat completions with `GROQ_API_KEY`; free model `llama-3.3-70b-versatile`. Both verified working at 0 credits.
 
 ## Two generation surfaces (different flows)
 - **Orchestrate page** (`/orchestrate`): synchronous `POST /api/orchestrate/run`; result lives only in React state + the generations history list. Credit-gated, so paid modalities (video/audio) are button-disabled at 0 balance.
