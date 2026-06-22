@@ -165,24 +165,38 @@ async function startRenderJob(opts: {
     if (identityUrl) options.imageUrl = identityUrl;
 
     let lastError = "no provider succeeded";
-    let result: { provider: string; model: string; output_url: string; raw?: unknown } | null = null;
+    let attemptedConfigured = false; // true once a provider with a key actually ran
+    type VideoResult = { provider: string; model: string; output_url: string; raw?: unknown };
+    let result: VideoResult | null = null;
 
     for (const p of providerOrder) {
       const adapter = videoAdapters[p];
       if (!adapter) continue;
       try {
         const r = await adapter({ model: modelForProvider(p), prompt, options });
-        if (r?.output_url) { result = r as typeof result; break; }
+        if (r?.output_url) {
+          result = { provider: r.provider, model: r.model, output_url: r.output_url, raw: r.raw };
+          break;
+        }
       } catch (err) {
-        lastError = err instanceof Error ? err.message : String(err);
-        console.error(`[render] ${p} failed:`, lastError);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        // provider_unconfigured:<name> means there is no API key — not a real attempt
+        if (!errMsg.startsWith("provider_unconfigured:")) attemptedConfigured = true;
+        lastError = errMsg;
+        console.error(`[render] ${p} failed:`, errMsg);
       }
     }
 
     if (!result) {
+      // No provider even had an API key configured — give an honest, actionable message
+      if (!attemptedConfigured) {
+        throw new Error(
+          "No video provider is configured. Video generation needs an API key — add REPLICATE_API_TOKEN (easiest, powers WAN 2.1), or a Kling / Google Gemini (Veo) / HuggingFace key in Secrets. Text and image generation work without any keys.",
+        );
+      }
       const creditErr = /1102|balance|credit|insufficient|402/i.test(lastError);
       throw new Error(creditErr
-        ? "All video providers need credits. Add $5 to replicate.com/account/billing (WAN 2.1) or top up klingai.com. Raw: " + lastError.slice(0, 120)
+        ? "Your video provider is out of credits. Top up Replicate (replicate.com/account/billing) or Kling (klingai.com). Raw: " + lastError.slice(0, 120)
         : lastError);
     }
 

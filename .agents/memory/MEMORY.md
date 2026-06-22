@@ -1,0 +1,1 @@
+- [Aurora generation provider model](aurora-generation-providers.md) — why video/audio fail without keys, and the free-model/fallback lists that must stay in sync across client+server.
