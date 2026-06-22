@@ -185,7 +185,10 @@ async function startRenderJob(opts: {
         // provider_unconfigured:<name> means there is no API key — not a real attempt
         if (!errMsg.startsWith("provider_unconfigured:")) {
           attemptedConfigured = true;
-          lastConfiguredError = errMsg; // keep the real error; trailing unconfigured providers must not mask it
+          // Keep the FIRST configured provider's error — that's the user's
+          // preferred provider (e.g. RunPod), whose failure is most actionable.
+          // Later providers (e.g. WAN's 402) must not overwrite/mask it.
+          if (!lastConfiguredError) lastConfiguredError = errMsg;
         }
         lastError = errMsg;
         console.error(`[render] ${p} failed:`, errMsg);
@@ -361,7 +364,7 @@ router.post("/retry", async (req, res) => {
   let clientId: string;
   try { clientId = assertClientId(rawCid); } catch { return res.status(400).json({ error: "invalid_client_id" }); }
 
-  const ALLOWED = ["kling", "wan", "veo", "sora", "huggingface"];
+  const ALLOWED = ["runpod", "kling", "wan", "veo", "sora", "huggingface"];
   if (!ALLOWED.includes(provider)) return res.status(400).json({ error: "invalid_provider" });
 
   const sb = createAnonClient();

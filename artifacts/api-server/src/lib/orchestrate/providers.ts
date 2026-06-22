@@ -284,33 +284,49 @@ function klingModelName(model: string): { model_name: string; mode: string } {
 
 /**
  * RunPod serverless workers return results in many shapes depending on the
- * deployed model. Walk the output and return the first usable video — an
- * http(s) URL, a data: URI, or a raw base64 blob (wrapped as a data URI).
+ * deployed model. Walk the output and return the first usable VIDEO — an
+ * http(s) URL, a data:video/* URI, or a raw base64 blob found under a
+ * video-ish key. We search explicit video keys first, skip clearly non-video
+ * keys (thumbnails, preview images, logs) so an image is never mistaken for a
+ * video, and only wrap raw base64 as mp4 when its key looks like video.
  */
-function extractMediaUrl(out: unknown, mime = "video/mp4"): string | null {
-  if (out == null) return null;
-  if (typeof out === "string") {
-    const s = out.trim();
-    if (/^https?:\/\//i.test(s)) return s;
-    if (s.startsWith("data:")) return s;
-    if (s.length > 256 && /^[A-Za-z0-9+/=\s]+$/.test(s)) return `data:${mime};base64,${s.replace(/\s+/g, "")}`;
-    return null;
-  }
-  if (Array.isArray(out)) {
-    for (const item of out) { const u = extractMediaUrl(item, mime); if (u) return u; }
-    return null;
-  }
-  if (typeof out === "object") {
-    const o = out as Record<string, unknown>;
-    for (const k of ["video_url", "videoUrl", "url", "output_url", "mp4", "video", "result", "output", "data", "s3_url", "signed_url", "media", "assets"]) {
-      if (k in o) { const u = extractMediaUrl(o[k], mime); if (u) return u; }
+function extractMediaUrl(out: unknown): string | null {
+  const isHttp = (s: string) => /^https?:\/\//i.test(s);
+  const VIDEO_KEY = /video|mp4|webm|mov|clip/i;
+  const NON_VIDEO_KEY = /thumb|preview|image|img|cover|poster|seed|logs?/i;
+
+  const fromString = (raw: string, key: string | null): string | null => {
+    const s = raw.trim();
+    if (isHttp(s)) return s;
+    if (s.startsWith("data:")) return /^data:video\//i.test(s) ? s : null;
+    if (key && VIDEO_KEY.test(key) && s.length > 256 && /^[A-Za-z0-9+/=\s]+$/.test(s)) {
+      return `data:video/mp4;base64,${s.replace(/\s+/g, "")}`;
     }
-    for (const k of ["video_base64", "base64", "b64", "mp4_base64", "base64_video"]) {
-      const v = o[k];
-      if (typeof v === "string" && v.length > 256) return v.startsWith("data:") ? v : `data:${mime};base64,${v.replace(/\s+/g, "")}`;
+    return null;
+  };
+
+  const walk = (node: unknown, key: string | null): string | null => {
+    if (node == null) return null;
+    if (typeof node === "string") return fromString(node, key);
+    if (Array.isArray(node)) {
+      for (const item of node) { const u = walk(item, key); if (u) return u; }
+      return null;
     }
-  }
-  return null;
+    if (typeof node === "object") {
+      const o = node as Record<string, unknown>;
+      for (const k of Object.keys(o)) {
+        if (VIDEO_KEY.test(k)) { const u = walk(o[k], k); if (u) return u; }
+      }
+      for (const k of Object.keys(o)) {
+        if (VIDEO_KEY.test(k) || NON_VIDEO_KEY.test(k)) continue;
+        const u = walk(o[k], k); if (u) return u;
+      }
+      return null;
+    }
+    return null;
+  };
+
+  return walk(out, null);
 }
 
 export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterResult>> = {
@@ -338,19 +354,30 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
       method: "POST",
       headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify({ input }),
+      signal: AbortSignal.timeout(30_000),
     });
     const stext = await submit.text();
     if (!submit.ok) throw new Error(`runpod submit ${submit.status}: ${stext.slice(0, 300)}`);
     let job = JSON.parse(stext) as { id?: string; status?: string; output?: unknown; error?: unknown };
     if (!job.id) throw new Error(`runpod: no job id in response: ${stext.slice(0, 200)}`);
+    const jobId = job.id;
 
-    // Poll up to ~15 min (serverless workers can cold-start)
+    // Poll up to ~15 min (serverless workers can cold-start). Bail out if the
+    // status endpoint keeps failing so a network hang can't stall forever.
     const DONE = ["COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"];
+    let consecutivePollErrors = 0;
     for (let i = 0; i < 180 && !DONE.includes(job.status ?? ""); i++) {
       await new Promise((r) => setTimeout(r, 5000));
-      const poll = await fetch(`${BASE}/status/${job.id}`, { headers: auth });
-      if (!poll.ok) continue;
-      job = await poll.json() as typeof job;
+      try {
+        const poll = await fetch(`${BASE}/status/${jobId}`, { headers: auth, signal: AbortSignal.timeout(30_000) });
+        if (!poll.ok) { consecutivePollErrors++; }
+        else { job = await poll.json() as typeof job; consecutivePollErrors = 0; }
+      } catch {
+        consecutivePollErrors++;
+      }
+      if (consecutivePollErrors >= 12) {
+        throw new Error(`runpod: status check failed ${consecutivePollErrors}x in a row for job ${jobId}`);
+      }
     }
     if (job.status !== "COMPLETED") {
       const detail = job.error ? JSON.stringify(job.error).slice(0, 200) : (job.status ?? "no response");
