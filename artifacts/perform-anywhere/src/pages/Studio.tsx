@@ -23,6 +23,7 @@ const STYLE_CHIPS = [
 ];
 
 const MODELS = [
+  { id: "seedance-lite",   label: "Seedance Lite",     badge: "Budget",  note: "~1–2 min · lowest cost" },
   { id: "kling-v1-6-std",  label: "Kling v1.6",       badge: "Fast",    note: "~2–3 min · standard quality" },
   { id: "kling-v1-6-pro",  label: "Kling v1.6 Pro",    badge: "Quality", note: "~4–6 min · best quality" },
   { id: "hailuo",          label: "Hailuo (Minimax)",  badge: "Alt",     note: "~3–5 min · different style" },
@@ -41,7 +42,7 @@ export default function Studio() {
   const [files, setFiles]             = useState<Record<AssetKind, StagedFile | null>>({
     performance: null, identity: null, outfit: null, scene: null,
   });
-  const [selectedModel, setSelectedModel] = useState("kling-v1-6-std");
+  const [selectedModel, setSelectedModel] = useState("seedance-lite");
   const [scenePrompt, setScenePrompt]     = useState("");
   const [stylePrompt, setStylePrompt]     = useState("");
   const [customPrompt, setCustomPrompt]   = useState("");
@@ -135,7 +136,7 @@ export default function Studio() {
   async function handleClearDraft() {
     await clearDraft();
     setTitle("Untitled performance");
-    setSelectedModel("kling-v1-6-std");
+    setSelectedModel("seedance-lite");
     setScenePrompt(""); setStylePrompt(""); setCustomPrompt(""); setEnhanced("");
     setStep(1);
     Object.keys(files).forEach((k) => {

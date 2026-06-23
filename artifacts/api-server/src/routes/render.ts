@@ -44,8 +44,8 @@ router.post("/start", async (req, res) => {
   try { clientId = assertClientId(rawCid); } catch { return res.status(400).json({ error: "invalid_client_id" }); }
   if (!projectId) return res.status(400).json({ error: "projectId required" });
 
-  const ALLOWED_MODELS = ["kling-v1-6-std", "kling-v1-6-pro", "hailuo", "fal"];
-  const model = requestedModel && ALLOWED_MODELS.includes(requestedModel) ? requestedModel : "kling-v1-6-std";
+  const ALLOWED_MODELS = ["seedance-lite", "kling-v1-6-std", "kling-v1-6-pro", "hailuo", "fal"];
+  const model = requestedModel && ALLOWED_MODELS.includes(requestedModel) ? requestedModel : "seedance-lite";
 
   const sb = createAnonClient();
 
@@ -151,10 +151,19 @@ async function startRenderJob(opts: {
     const { videoAdapters } = await import("../lib/orchestrate/providers.js");
 
     // Fallback chain: Kling → WAN → Veo 2 → Sora → HuggingFace (Fal excluded)
-    const primaryProvider = preferredProvider ?? "kling";
+    // Route the user's chosen model to its real provider; the rest stay as fallback.
+    const modelToProvider = (m: string): string => {
+      if (m.startsWith("kling")) return "kling";
+      if (m.startsWith("seedance")) return "seedance";
+      if (m === "hailuo") return "hailuo";
+      if (m === "fal") return "fal";
+      if (m === "wan") return "wan";
+      return "seedance";
+    };
+    const primaryProvider = preferredProvider ?? modelToProvider(chosenModel);
     const providerOrder = [
       primaryProvider,
-      ...["runpod", "kling", "wan", "veo", "sora", "huggingface"].filter((p) => p !== primaryProvider),
+      ...["seedance", "runpod", "kling", "wan", "veo", "sora", "huggingface"].filter((p) => p !== primaryProvider),
     ];
 
     const modelForProvider = (p: string) => {
@@ -364,7 +373,7 @@ router.post("/retry", async (req, res) => {
   let clientId: string;
   try { clientId = assertClientId(rawCid); } catch { return res.status(400).json({ error: "invalid_client_id" }); }
 
-  const ALLOWED = ["runpod", "kling", "wan", "veo", "sora", "huggingface"];
+  const ALLOWED = ["seedance", "runpod", "kling", "wan", "veo", "sora", "huggingface"];
   if (!ALLOWED.includes(provider)) return res.status(400).json({ error: "invalid_provider" });
 
   const sb = createAnonClient();

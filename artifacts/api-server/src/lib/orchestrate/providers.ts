@@ -423,6 +423,46 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
     return { provider: "replicate", model, output_url: String(url), raw: j };
   },
 
+  // Seedance 1 Lite via Replicate — the cheapest funded video option.
+  // Supports text2video and image2video (pass options.imageUrl as first frame).
+  seedance: async ({ prompt, options = {} }) => {
+    const key = env("REPLICATE_API_TOKEN");
+    if (!key) throw new ProviderUnconfigured("seedance");
+    const model = "bytedance/seedance-1-lite";
+    const input: Record<string, unknown> = {
+      prompt: String(prompt).slice(0, 2500),
+      duration: options.duration ?? 5,
+      resolution: options.resolution ?? "480p",
+    };
+    // For i2v the still frame defines framing, so don't also force aspect_ratio.
+    if (options.imageUrl) {
+      input.image = options.imageUrl;
+    } else {
+      input.aspect_ratio = options.aspectRatio ?? "16:9";
+    }
+
+    const startRes = await fetch(`https://api.replicate.com/v1/models/${model}/predictions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, Prefer: "wait=5" },
+      body: JSON.stringify({ input }),
+    });
+    if (!startRes.ok) throw new Error(`seedance/replicate submit ${startRes.status}: ${await startRes.text()}`);
+    let pred = await startRes.json() as { id: string; status: string; output?: unknown; error?: string };
+
+    // Poll up to ~8 min (cheap model, usually finishes in ~30–90s)
+    for (let i = 0; i < 96 && ["starting", "processing"].includes(pred.status); i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      const poll = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      pred = await poll.json() as typeof pred;
+    }
+    if (pred.status !== "succeeded") throw new Error(`seedance/replicate failed: ${pred.error ?? pred.status}`);
+    const url = Array.isArray(pred.output) ? (pred.output as string[])[0] : pred.output as string;
+    if (!url) throw new Error("seedance/replicate: no video url in output");
+    return { provider: "seedance", model, output_url: url, raw: pred };
+  },
+
   kling: async ({ model, prompt, options = {} }) => {
     const ak = env("KLING_ACCESS_KEY");
     const sk = env("KLING_SECRET_KEY");
