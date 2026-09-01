@@ -23,6 +23,31 @@ const env = (k: string) => process.env[k];
 
 // ──────────────── TEXT ────────────────
 export const textAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterResult>> = {
+  modelark: async ({ model, prompt, options = {} }) => {
+    const key = env("MODEL_ARK_API_KEY");
+    if (!key) throw new ProviderUnconfigured("modelark");
+
+    // ModelArk exposes an OpenAI-compatible chat completions endpoint.
+    // The model value is kept exactly as activated in the user's console.
+    const base = (env("MODEL_ARK_BASE_URL") ?? "https://ark.ap-southeast.bytepluses.com/api/v3").replace(/\/$/, "");
+    const res = await fetch(`${base}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        messages: [
+          ...(options.systemPrompt ? [{ role: "system", content: options.systemPrompt }] : []),
+          { role: "user", content: prompt },
+        ],
+        temperature: (options.temperature as number) ?? 0.7,
+        max_tokens: (options.maxTokens as number) ?? 2048,
+      }),
+    });
+    if (!res.ok) throw new Error(`modelark ${res.status}: ${await res.text()}`);
+    const j = await res.json() as any;
+    return { provider: "modelark", model, output_text: j.choices?.[0]?.message?.content ?? "", raw: j };
+  },
+
   lovable: async ({ model, prompt, options = {} }) => {
     const key = env("LOVABLE_API_KEY");
     if (!key) throw new ProviderUnconfigured("lovable");
@@ -38,7 +63,7 @@ export const textAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRes
       }),
     });
     if (!res.ok) throw new Error(`lovable ${res.status}: ${await res.text()}`);
-    const j = await res.json();
+    const j = await res.json() as any;
     return { provider: "lovable", model, output_text: j.choices?.[0]?.message?.content ?? "", raw: j };
   },
 
@@ -59,7 +84,7 @@ export const textAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRes
       }),
     });
     if (!res.ok) throw new Error(`groq ${res.status}: ${await res.text()}`);
-    const j = await res.json();
+    const j = await res.json() as any;
     return { provider: "groq", model, output_text: j.choices?.[0]?.message?.content ?? "", raw: j };
   },
 
@@ -72,7 +97,7 @@ export const textAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRes
       body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], temperature: (options.temperature as number) ?? 0.7 }),
     });
     if (!res.ok) throw new Error(`mistral ${res.status}: ${await res.text()}`);
-    const j = await res.json();
+    const j = await res.json() as any;
     return { provider: "mistral", model, output_text: j.choices?.[0]?.message?.content ?? "", raw: j };
   },
 
@@ -85,7 +110,7 @@ export const textAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRes
       body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], temperature: (options.temperature as number) ?? 0.7 }),
     });
     if (!res.ok) throw new Error(`openai ${res.status}: ${await res.text()}`);
-    const j = await res.json();
+    const j = await res.json() as any;
     return { provider: "openai", model, output_text: j.choices?.[0]?.message?.content ?? "", raw: j };
   },
 
@@ -98,7 +123,7 @@ export const textAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRes
       body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }] }),
     });
     if (!res.ok) throw new Error(`cohere ${res.status}: ${await res.text()}`);
-    const j = await res.json();
+    const j = await res.json() as any;
     return { provider: "cohere", model, output_text: j.message?.content?.map((c: { text: string }) => c.text).join("") ?? "", raw: j };
   },
 
@@ -114,7 +139,7 @@ export const textAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRes
       },
     );
     if (!res.ok) throw new Error(`gemini ${res.status}: ${await res.text()}`);
-    const j = await res.json();
+    const j = await res.json() as any;
     return { provider: "gemini", model, output_text: j.candidates?.[0]?.content?.parts?.map((p: { text: string }) => p.text).join("") ?? "", raw: j };
   },
 
@@ -135,7 +160,7 @@ export const textAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRes
       }),
     });
     if (!res.ok) throw new Error(`huggingface ${res.status}: ${await res.text()}`);
-    const j = await res.json();
+    const j = await res.json() as any;
     return { provider: "huggingface", model, output_text: j.choices?.[0]?.message?.content ?? "", raw: j };
   },
 
@@ -158,7 +183,7 @@ export const imageAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
       body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], modalities: ["image", "text"] }),
     });
     if (!res.ok) throw new Error(`lovable ${res.status}: ${await res.text()}`);
-    const j = await res.json();
+    const j = await res.json() as any;
     const img = j.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     if (!img) throw new Error("lovable: no image returned");
     return { provider: "lovable", model, output_url: img, raw: j };
@@ -173,7 +198,7 @@ export const imageAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
       body: JSON.stringify({ prompt, image_size: options.imageSize ?? "landscape_16_9", num_images: options.n ?? 1 }),
     });
     if (!res.ok) throw new Error(`fal ${res.status}: ${await res.text()}`);
-    const j = await res.json();
+    const j = await res.json() as any;
     const url = j.images?.[0]?.url ?? j.image?.url;
     if (!url) throw new Error("fal: no image in response");
     return { provider: "fal", model, output_url: url, raw: j };
@@ -188,7 +213,7 @@ export const imageAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
       body: JSON.stringify({ input: { prompt, ...(options.input as object ?? {}) } }),
     });
     if (!res.ok) throw new Error(`replicate ${res.status}: ${await res.text()}`);
-    const j = await res.json();
+    const j = await res.json() as any;
     const url = Array.isArray(j.output) ? j.output[0] : j.output;
     if (!url) throw new Error("replicate: no output");
     return { provider: "replicate", model, output_url: String(url), raw: j };
@@ -203,7 +228,7 @@ export const imageAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
       body: JSON.stringify([{ taskType: "imageInference", taskUUID: crypto.randomUUID(), positivePrompt: prompt, model, width: options.width ?? 1024, height: options.height ?? 1024, numberResults: options.n ?? 1 }]),
     });
     if (!res.ok) throw new Error(`runware ${res.status}: ${await res.text()}`);
-    const j = await res.json();
+    const j = await res.json() as any;
     const url = j.data?.[0]?.imageURL;
     if (!url) throw new Error("runware: no image");
     return { provider: "runware", model, output_url: url, raw: j };

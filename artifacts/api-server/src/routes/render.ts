@@ -471,6 +471,7 @@ router.post("/signed-url/asset", async (req, res) => {
 
 router.get("/providers", (_req, res) => {
   const PROVIDERS = [
+    { id: "MODEL_ARK_API_KEY",   label: "BytePlus ModelArk (text)", configKey: "MODEL_ARK_API_KEY", mode: "direct" },
     { id: "KLING_ACCESS_KEY",      label: "Kling AI",            configKey: "KLING_ACCESS_KEY" },
     { id: "FAL_KEY",               label: "Fal.ai (Hailuo/Runway)", configKey: "FAL_KEY" },
     { id: "REPLICATE_API_TOKEN",   label: "Replicate",           configKey: "REPLICATE_API_TOKEN" },
@@ -481,8 +482,14 @@ router.get("/providers", (_req, res) => {
     { id: "HUGGINGFACE_API_KEY",   label: "HuggingFace",         configKey: "HUGGINGFACE_API_KEY" },
     { id: "ELEVENLABS_API_KEY",    label: "ElevenLabs (audio)",  configKey: "ELEVENLABS_API_KEY" },
     { id: "PAYSTACK_SECRET_KEY",   label: "Paystack (billing)",  configKey: "PAYSTACK_SECRET_KEY" },
+    { id: "INVIDEO_WORKFLOW",      label: "InVideo workflows (MCP)", configKey: "__INVIDEO_WORKFLOW__", mode: "workflow" },
   ];
-  return res.json(PROVIDERS.map((p) => ({ id: p.id, label: p.label, configured: !!process.env[p.configKey] })));
+  return res.json(PROVIDERS.map((p) => ({
+    id: p.id,
+    label: p.label,
+    configured: p.mode === "workflow" ? true : !!process.env[p.configKey],
+    mode: p.mode ?? "direct",
+  })));
 });
 
 export default router;

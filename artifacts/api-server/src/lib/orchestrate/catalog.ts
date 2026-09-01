@@ -17,14 +17,14 @@ export function estimateCredits(modality: Modality, options: Record<string, unkn
 }
 
 export const CATALOG_DEFAULT_FALLBACKS: Record<Modality, string[]> = {
-  text:  ["groq", "gemini", "cohere", "lovable", "mistral", "pollinations", "huggingface", "openai"],
+  text:  ["modelark", "groq", "gemini", "cohere", "lovable", "mistral", "pollinations", "huggingface", "openai"],
   image: ["lovable", "pollinations", "huggingface", "fal", "replicate", "runware"],
   video: ["kling", "wan", "veo", "sora", "huggingface", "replicate", "fal"],
   audio: ["elevenlabs", "replicate"],
 };
 
 // Providers that cost 0 credits (free-tier / key-based, no billing)
-export const FREE_PROVIDERS = new Set(["groq", "gemini", "cohere", "huggingface", "pollinations", "veo"]);
+export const FREE_PROVIDERS = new Set(["modelark", "groq", "gemini", "cohere", "huggingface", "pollinations", "veo"]);
 
 // Specific model IDs that are free even though their provider also offers paid models.
 // Must stay in sync with the `free: true` entries in the client catalog
@@ -38,6 +38,15 @@ export const FREE_MODELS = new Set([
   "pollinations/flux",
   "pollinations/turbo",
   "groq/llama-3.3-70b-versatile",
+  "modelark/Dola-Seed-2.0-mini",
+  "modelark/Dola-Seed-2.0-lite",
+  "modelark/DeepSeek-V4-flash",
+  "modelark/DeepSeek-V4-pro",
+  "modelark/Dola-Seed-2.0-Code",
+  "modelark/DeepSeek-V4-Pro-GA",
+  "modelark/DeepSeek-V4-Flash-GA",
+  "modelark/Dola-Seed-2.1-turbo",
+  "modelark/GLM-5.2",
 ]);
 
 /** True when a generation should cost 0 credits — free provider or explicitly free model. */
@@ -59,6 +68,7 @@ export const FALLBACK_MODELS: Record<Modality, Record<string, string>> = {
     huggingface: "meta-llama/Llama-3.1-8B-Instruct",
     openai: "gpt-4o-mini",
     pollinations: "openai",
+    modelark: "DeepSeek-V4-flash",
   },
   image: {
     lovable: "google/gemini-2.5-flash-image",

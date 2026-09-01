@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { CATALOG, estimateCredits, isModelFree, type Modality } from "@/lib/catalog";
+import { WORKFLOWS, getWorkflow } from "@/lib/workflows";
 import { api } from "@/lib/api";
 import { getClientId } from "@/lib/client-id";
-import { Loader2, Coins, Zap, ChevronRight } from "lucide-react";
+import { Loader2, Coins, Zap, ChevronRight, Copy } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 
 const MODALITIES: Modality[] = ["text", "image", "video", "audio"];
@@ -22,6 +23,7 @@ export default function Orchestrate() {
   const [modelId, setModelId] = useState<string>(CATALOG.text[0].id);
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState(5);
+  const [workflowId, setWorkflowId] = useState("");
   const [email, setEmail] = useState("");
 
   useEffect(() => { setClientId(getClientId()); }, []);
@@ -40,12 +42,15 @@ export default function Orchestrate() {
   });
 
   const selectedModel = CATALOG[modality].find((m) => m.id === modelId) ?? CATALOG[modality][0];
+  const activeWorkflow = getWorkflow(workflowId);
+  const isWorkflowModel = selectedModel.access === "workflow";
+  const effectivePrompt = [activeWorkflow?.promptPrefix, prompt.trim()].filter(Boolean).join("\n\n");
   const free = isModelFree(selectedModel);
-  const cost = free ? 0 : estimateCredits(modality, modality === "video" ? { duration } : {});
+  const cost = isWorkflowModel || free ? 0 : estimateCredits(modality, modality === "video" ? { duration } : {});
   const balance = wallet.data?.balance ?? 0;
 
   const run = useMutation({
-    mutationFn: () => api.runGeneration({ clientId, modality, modelId, prompt, options: modality === "video" ? { duration } : {} }),
+    mutationFn: () => api.runGeneration({ clientId, modality, modelId, prompt: effectivePrompt, options: modality === "video" ? { duration } : {} }),
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["wallet", clientId] });
       qc.invalidateQueries({ queryKey: ["generations", clientId] });
@@ -67,6 +72,19 @@ export default function Orchestrate() {
     Object.assign(t.style, { position:"fixed",bottom:"20px",right:"20px",background:"#b91c1c",color:"#fff",padding:"10px 16px",borderRadius:"6px",fontSize:"13px",zIndex:"9999" });
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 4000);
+  }
+
+  async function copyWorkflowBrief() {
+    if (!effectivePrompt) {
+      toast_error("Add a prompt before copying a workflow brief");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(effectivePrompt);
+      toast_error("Workflow brief copied");
+    } catch {
+      toast_error("Could not copy the workflow brief");
+    }
   }
 
   return (
@@ -129,10 +147,21 @@ export default function Orchestrate() {
               <select className="w-full rounded border border-border bg-input px-3 py-2 text-sm text-foreground outline-none"
                 value={modelId} onChange={(e) => setModelId(e.target.value)}
               >
-                {CATALOG[modality].map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}{m.free ? " · free" : ""}</option>
-                ))}
+                {(["modelark", "lovable", "gemini", "groq", "pollinations", "huggingface", "fal", "replicate", "runware", "kling", "elevenlabs", "mistral", "openai", "cohere", "invideo"] as const).map((provider) => {
+                  const models = CATALOG[modality].filter((m) => m.provider === provider);
+                  if (!models.length) return null;
+                  return (
+                    <optgroup key={provider} label={provider === "modelark" ? "BytePlus ModelArk" : provider === "invideo" ? "InVideo workflows" : provider}>
+                      {models.map((m) => (
+                        <option key={m.id} value={m.id}>{m.label}{m.free ? " · free" : ""}</option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
               </select>
+              {selectedModel.note && (
+                <p className="mt-2 text-xs text-muted-foreground">{selectedModel.note}</p>
+              )}
             </div>
             {modality === "video" && (
               <div>
@@ -141,6 +170,50 @@ export default function Orchestrate() {
                   onChange={(e) => setDuration(Number(e.target.value))}
                   className="w-full rounded border border-border bg-input px-3 py-2 text-sm text-foreground outline-none"
                 />
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-border/40 bg-card/60 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-muted-foreground">Workflow preset</label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Optional InVideo handoff brief. It can also enhance a direct model prompt.
+                </p>
+              </div>
+              <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-primary">
+                MCP workflow
+              </span>
+            </div>
+            <div className="mt-3 flex flex-col gap-3 md:flex-row">
+              <select
+                className="min-w-0 flex-1 rounded border border-border bg-input px-3 py-2 text-sm text-foreground outline-none"
+                value={workflowId}
+                onChange={(e) => setWorkflowId(e.target.value)}
+              >
+                <option value="">No workflow preset</option>
+                {WORKFLOWS.map((workflow) => (
+                  <option key={workflow.id} value={workflow.id}>{workflow.label}</option>
+                ))}
+              </select>
+              {activeWorkflow && (
+                <button
+                  type="button"
+                  onClick={copyWorkflowBrief}
+                  disabled={!effectivePrompt}
+                  className="inline-flex items-center justify-center gap-2 rounded border border-primary/40 px-4 py-2 text-xs font-semibold text-primary transition hover:bg-primary/10 disabled:opacity-40"
+                >
+                  <Copy className="h-3.5 w-3.5" /> Copy brief
+                </button>
+              )}
+            </div>
+            {activeWorkflow && (
+              <div className="mt-3 rounded border border-border/30 bg-background/40 p-3">
+                <p className="text-sm text-foreground">{activeWorkflow.description}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Suggested models: {activeWorkflow.modelHints.join(" · ")}
+                </p>
               </div>
             )}
           </div>
@@ -158,11 +231,15 @@ export default function Orchestrate() {
               Estimated cost: <span className="text-foreground font-semibold">{cost} credits</span>
               {balance < cost && <span className="ml-2 text-destructive">(insufficient balance)</span>}
             </p>
-            <button onClick={() => run.mutate()}
+            <button onClick={() => isWorkflowModel ? copyWorkflowBrief() : run.mutate()}
               disabled={run.isPending || !prompt.trim() || !clientId || balance < cost}
               className="inline-flex items-center gap-2 rounded bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition"
             >
-              {run.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</> : <><Zap className="h-4 w-4" /> Generate</>}
+              {isWorkflowModel
+                ? <><Copy className="h-4 w-4" /> Copy InVideo brief</>
+                : run.isPending
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
+                  : <><Zap className="h-4 w-4" /> Generate</>}
             </button>
           </div>
 

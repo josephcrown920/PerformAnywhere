@@ -58,6 +58,12 @@ router.post("/run", async (req, res) => {
     return res.status(400).json({ error: "invalid_client_id" });
   }
   if (!prompt?.trim()) return res.status(400).json({ error: "prompt required" });
+  if (modelId?.startsWith("invideo/")) {
+    return res.status(409).json({
+      error: "invideo_workflow_only",
+      message: "InVideo model entries are available through workflow handoffs. Choose an InVideo workflow and copy its brief instead of running a direct model request.",
+    });
+  }
 
   const sb = createAnonClient();
   const primaryProvider = modelId.split("/")[0];

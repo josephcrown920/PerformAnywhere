@@ -56,6 +56,7 @@ type DraftFileRecord = { kind: string; name: string; type: string; data: ArrayBu
 export type DraftText = {
   title: string;
   selectedModel: string;
+  workflowId?: string;
   scenePrompt: string;
   stylePrompt: string;
   customPrompt: string;

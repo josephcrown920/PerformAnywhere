@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 import { Loader2, Sparkles, Upload, X, CheckCircle2, Zap, Star, History } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
+import { WORKFLOWS, getWorkflow } from "@/lib/workflows";
 
 type AssetKind = "performance" | "identity" | "outfit" | "scene";
 type StagedFile = { file: File; preview: string };
@@ -43,6 +44,7 @@ export default function Studio() {
     performance: null, identity: null, outfit: null, scene: null,
   });
   const [selectedModel, setSelectedModel] = useState("seedance-lite");
+  const [workflowId, setWorkflowId] = useState("");
   const [scenePrompt, setScenePrompt]     = useState("");
   const [stylePrompt, setStylePrompt]     = useState("");
   const [customPrompt, setCustomPrompt]   = useState("");
@@ -84,6 +86,7 @@ export default function Studio() {
       if (hasTextContent && text) {
         setTitle(text.title);
         setSelectedModel(text.selectedModel);
+        setWorkflowId(text.workflowId ?? "");
         setScenePrompt(text.scenePrompt);
         setStylePrompt(text.stylePrompt);
         setCustomPrompt(text.customPrompt);
@@ -115,10 +118,10 @@ export default function Studio() {
     if (!hasContent) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      saveDraftText({ title, selectedModel, scenePrompt, stylePrompt, customPrompt, enhanced, step, savedAt: Date.now() });
+      saveDraftText({ title, selectedModel, workflowId, scenePrompt, stylePrompt, customPrompt, enhanced, step, savedAt: Date.now() });
     }, 600);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [title, selectedModel, scenePrompt, stylePrompt, customPrompt, enhanced, step]);
+  }, [title, selectedModel, workflowId, scenePrompt, stylePrompt, customPrompt, enhanced, step]);
 
   // ── File state + IndexedDB ───────────────────────────────────────────────────
   function setFile(kind: AssetKind, f: File | null) {
@@ -137,6 +140,7 @@ export default function Studio() {
     await clearDraft();
     setTitle("Untitled performance");
     setSelectedModel("seedance-lite");
+    setWorkflowId("");
     setScenePrompt(""); setStylePrompt(""); setCustomPrompt(""); setEnhanced("");
     setStep(1);
     Object.keys(files).forEach((k) => {
@@ -168,12 +172,15 @@ export default function Studio() {
     setSubmitting(true);
     try {
       const clientId = getClientId();
+      const workflow = getWorkflow(workflowId);
+      const directedPrompt = customPrompt || enhanced || [scenePrompt, stylePrompt].filter(Boolean).join(". ");
+      const renderPrompt = [workflow?.promptPrefix, directedPrompt].filter(Boolean).join("\n\n") || null;
 
       const baseInsert = {
         client_id: clientId, title, status: "draft",
         scene_prompt: scenePrompt || null,
         style_prompt: stylePrompt || null,
-        enhanced_prompt: customPrompt || enhanced || null,
+        enhanced_prompt: renderPrompt,
       };
       let { data: project, error: pErr } = await supabase
         .from("projects")
@@ -212,6 +219,7 @@ export default function Studio() {
 
   const canGoNext   = step === 1 ? true : true;
   const activeModel = MODELS.find((m) => m.id === selectedModel) ?? MODELS[0];
+  const activeWorkflow = getWorkflow(workflowId);
 
   return (
     <AppLayout>
@@ -327,6 +335,47 @@ export default function Studio() {
                   );
                 })}
               </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-3">Workflow preset</p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() => setWorkflowId("")}
+                  className="rounded-xl p-4 text-left transition-all"
+                  style={{
+                    background: !workflowId ? "oklch(0.58 0.26 290 / 0.20)" : "oklch(0.14 0.05 285)",
+                    border: !workflowId ? "1.5px solid oklch(0.58 0.26 290 / 0.7)" : "1.5px solid oklch(0.28 0.07 285 / 0.5)",
+                  }}
+                >
+                  <span className="text-sm font-semibold text-white">No preset</span>
+                  <span className="mt-1 block text-xs text-white/40">Use the model with your direction as written.</span>
+                </button>
+                {WORKFLOWS.map((workflow) => {
+                  const active = workflowId === workflow.id;
+                  return (
+                    <button
+                      key={workflow.id}
+                      type="button"
+                      onClick={() => setWorkflowId(workflow.id)}
+                      className="rounded-xl p-4 text-left transition-all"
+                      style={{
+                        background: active ? "oklch(0.58 0.26 290 / 0.20)" : "oklch(0.14 0.05 285)",
+                        border: active ? "1.5px solid oklch(0.58 0.26 290 / 0.7)" : "1.5px solid oklch(0.28 0.07 285 / 0.5)",
+                      }}
+                    >
+                      <span className="text-sm font-semibold text-white">{workflow.label}</span>
+                      <span className="mt-1 block text-xs leading-relaxed text-white/40">{workflow.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {activeWorkflow && (
+                <p className="mt-3 text-xs text-white/35">
+                  This preset will be included in the render brief. Suggested models: {activeWorkflow.modelHints.join(" · ")}.
+                </p>
+              )}
             </div>
 
             {/* Custom prompt */}
