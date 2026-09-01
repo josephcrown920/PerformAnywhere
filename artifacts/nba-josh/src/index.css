@@ -1,63 +1,123 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Space+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
 
 @theme inline {
-  --color-primary: #080808;
-  --color-secondary: #111111;
-  --color-accent: #e63b2e;
-  --color-bg-light: #080808;
-  --color-bg-dark: #000000;
-  --color-bg-muted: #161616;
+  --color-primary: #ff6a32;
+  --color-secondary: #10242d;
+  --color-accent: #ff6a32;
+  --color-bg-light: #122d36;
+  --color-bg-dark: #071218;
+  --color-bg-muted: #18343d;
 
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #e63b2e;
-  --color-text-muted: #f0c040;
-  --color-text-inverse: #000000;
+  --color-text-primary: #f5f0e8;
+  --color-text-secondary: #ff6a32;
+  --color-text-muted: #92c9d5;
+  --color-text-inverse: #071218;
 
-  --font-display: 'Bebas Neue', sans-serif;
+  --font-display: 'Anton', sans-serif;
   --font-mono: 'Space Mono', monospace;
 }
 
+:root {
+  --ink: #071218;
+  --deep-sea: #0c2028;
+  --signal: #ff6a32;
+  --signal-soft: #ff9d6f;
+  --ice: #9bdae2;
+  --paper: #f5f0e8;
+}
+
 body {
-  background-color: var(--color-bg-dark);
-  color: var(--color-text-primary);
+  background-color: var(--ink);
+  color: var(--paper);
   margin: 0;
   padding: 0;
   overflow: hidden;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
 }
 
-@keyframes glitch-anim {
-  0% { transform: translate(0) }
-  20% { transform: translate(-2px, 1px) }
-  40% { transform: translate(-1px, -1px) }
-  60% { transform: translate(2px, 1px) }
-  80% { transform: translate(1px, -1px) }
-  100% { transform: translate(0) }
+* {
+  box-sizing: border-box;
 }
 
-.glitch {
-  animation: glitch-anim 0.2s infinite linear alternate-reverse;
+.video-shell {
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 72% 18%, rgba(255, 106, 50, 0.16), transparent 30%),
+    radial-gradient(circle at 14% 76%, rgba(155, 218, 226, 0.12), transparent 34%),
+    var(--ink);
 }
 
-@keyframes scanlines {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(100%); }
+.video-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  pointer-events: none;
+  opacity: 0.18;
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 24.8%,
+    rgba(155, 218, 226, 0.16) 25%,
+    transparent 25.2%
+  );
+}
+
+.video-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 55;
+  pointer-events: none;
+  opacity: 0.055;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)'/%3E%3C/svg%3E");
+}
+
+.film-grain {
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(245, 240, 232, 0.035) 0,
+    rgba(245, 240, 232, 0.035) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
 }
 
 .scanline-overlay {
   background: repeating-linear-gradient(
     to bottom,
     transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.2) 3px,
-    rgba(0, 0, 0, 0.2) 4px
+    transparent 3px,
+    rgba(245, 240, 232, 0.14) 4px,
+    rgba(245, 240, 232, 0.14) 5px
   );
   pointer-events: none;
 }
 
-.film-grain {
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-  opacity: 0.05;
-  pointer-events: none;
+.display-face {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.mono-face {
+  font-family: var(--font-mono);
+}
+
+.text-stroke {
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(245, 240, 232, 0.65);
+}
+
+.photo-vignette {
+  background:
+    linear-gradient(90deg, rgba(7, 18, 24, 0.85), transparent 32%, transparent 72%, rgba(7, 18, 24, 0.62)),
+    linear-gradient(0deg, rgba(7, 18, 24, 0.78), transparent 40%);
+}
+
+.tracking-cinematic {
+  letter-spacing: 0.34em;
 }

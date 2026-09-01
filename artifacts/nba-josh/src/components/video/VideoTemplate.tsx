@@ -1,13 +1,16 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ComponentType } from 'react';
 import { useVideoPlayer } from '@/lib/video';
 import { Scene1 } from './video_scenes/Scene1';
 import { Scene2 } from './video_scenes/Scene2';
 import { Scene3 } from './video_scenes/Scene3';
 import { Scene4 } from './video_scenes/Scene4';
+import type { ScenePhotos } from './video_scenes/types';
 
-import joshMicImg from '@assets/IMG_8712_1782053075069.jpg';
-import joshFaceImg from '@assets/IMG_8707_1782053075069.jpg';
+import openerImg from '@assets/IMG_4240_1788231391518.jpeg';
+import profileImg from '@assets/IMG_3850_1788231391518.png';
+import crowdImg from '@assets/IMG_3851_1788231391518.png';
+import tiltImg from '@assets/IMG_3849_1788231391518.png';
 import hookAudio from '@assets/The_one_hook2_1782053088995.mp3';
 
 export const SCENE_DURATIONS: Record<string, number> = {
@@ -17,11 +20,18 @@ export const SCENE_DURATIONS: Record<string, number> = {
   exit: 3000,
 };
 
-const SCENE_COMPONENTS: Record<string, React.ComponentType> = {
+const SCENE_COMPONENTS: Record<string, ComponentType<{ photos: ScenePhotos }>> = {
   opening: Scene1,
   build: Scene2,
   tension: Scene3,
   exit: Scene4,
+};
+
+const PHOTOS: ScenePhotos = {
+  opener: openerImg,
+  profile: profileImg,
+  crowd: crowdImg,
+  tilt: tiltImg,
 };
 
 const SCENE_START_SEC: Record<string, number> = (() => {
@@ -70,67 +80,86 @@ export default function VideoTemplate({
 
   const SceneComponent = SCENE_COMPONENTS[baseSceneKey];
 
-  const isExitScene = baseSceneKey === 'exit';
-  const joshImg = isExitScene ? joshFaceImg : joshMicImg;
-
   return (
-    <div className="w-full h-screen overflow-hidden relative bg-[#080808]">
-      {/* Background layer */}
-      <div className="absolute inset-0">
+    <div className="video-shell w-full h-[100dvh] overflow-hidden relative">
+      {/* A persistent camera bed keeps the four stills in one continuous world. */}
+      <div className="absolute inset-0 overflow-hidden">
+        <motion.div
+          className="absolute -inset-[10%] opacity-45"
+          animate={{
+            x: sceneIndex === 0 ? '-2%' : sceneIndex === 1 ? '4%' : sceneIndex === 2 ? '-4%' : '2%',
+            y: sceneIndex === 0 ? '2%' : sceneIndex === 1 ? '-3%' : sceneIndex === 2 ? '4%' : '-1%',
+            scale: sceneIndex === 2 ? 1.08 : 1.02,
+            rotate: sceneIndex === 3 ? -1.5 : 0,
+          }}
+          transition={{ duration: 2.4, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <img
+            src={PHOTOS[sceneIndex === 0 ? 'opener' : sceneIndex === 1 ? 'profile' : sceneIndex === 2 ? 'crowd' : 'tilt']}
+            alt=""
+            className="w-full h-full object-cover saturate-[0.8] contrast-[1.12]"
+          />
+        </motion.div>
+        <motion.div
+          className="absolute left-[54%] top-[-14%] h-[128%] w-[34%] overflow-hidden border border-[#9bdae2]/18 opacity-60"
+          animate={{
+            x: sceneIndex === 0 ? '0%' : sceneIndex === 1 ? '-12%' : sceneIndex === 2 ? '8%' : '-5%',
+            rotate: sceneIndex === 0 ? 3 : sceneIndex === 1 ? -1 : sceneIndex === 2 ? 2 : -4,
+            scale: sceneIndex === 1 ? 1.12 : 1,
+          }}
+          transition={{ duration: 2.1, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <img
+            src={PHOTOS.profile}
+            alt=""
+            className="w-full h-full object-cover object-center mix-blend-screen opacity-40"
+          />
+        </motion.div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_34%,rgba(255,106,50,0.28),transparent_25%),linear-gradient(120deg,rgba(7,18,24,0.94),rgba(7,18,24,0.4)_52%,rgba(7,18,24,0.8))]" />
+        <div className="absolute inset-0 scanline-overlay opacity-25" />
+      </div>
+
+      {/* Persistent color signal: it travels instead of resetting with each scene. */}
+      <motion.div
+        className="absolute z-30 left-0 top-[18%] h-[1px] bg-[#ff6a32]"
+        animate={{
+          width: sceneIndex === 0 ? '22%' : sceneIndex === 1 ? '48%' : sceneIndex === 2 ? '74%' : '34%',
+          x: sceneIndex === 2 ? '18%' : sceneIndex === 3 ? '55%' : '0%',
+          opacity: [0.55, 1, 0.55],
+        }}
+        transition={{ width: { duration: 1.2, ease: [0.16, 1, 0.3, 1] }, x: { duration: 1.2, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: 2.4, repeat: Infinity, ease: 'easeInOut' } }}
+      />
+
+      {/* Background atmosphere */}
+      <div className="absolute inset-0 pointer-events-none">
         <motion.img
-          src={`${import.meta.env.BASE_URL}images/bg-street.png`}
-          className="w-full h-full object-cover opacity-60"
-          animate={{ scale: [1, 1.05, 1], filter: ['brightness(1)', 'brightness(1.2)', 'brightness(1)'] }}
+          src={PHOTOS.opener}
+          alt=""
+          className="w-full h-full object-cover opacity-[0.08] mix-blend-screen"
+          animate={{ scale: [1.03, 1.07, 1.03], x: ['0%', '-2%', '0%'] }}
           transition={{ duration: 15, repeat: Infinity, ease: 'linear' }}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
       </div>
 
-      {/* Officers Loop (Top Left) */}
-      <div className="absolute top-[5%] left-[5%] w-[38%] h-[45%] overflow-hidden border border-[#1e4a70]/30 shadow-[0_0_20px_rgba(30,74,112,0.2)]">
-        <motion.div className="absolute inset-0 bg-[#1e4a70]/20 mix-blend-color-burn z-10" />
-        <div className="absolute inset-0 scanline-overlay z-20 opacity-50" />
-        <motion.img
-          src={`${import.meta.env.BASE_URL}images/officers.png`}
-          className="w-[120%] h-[120%] object-cover object-center glitch"
-          style={{ filter: 'contrast(1.2) sepia(0.5) hue-rotate(180deg) saturate(200%) brightness(0.8)' }}
-          animate={{ x: [0, -10, 5, -5, 0], y: [0, 5, -5, 10, 0] }}
-          transition={{ duration: 0.2, repeat: Infinity }}
-        />
+      {/* Persistent lockup and capture marks */}
+      <div className="absolute top-[10.5%] left-[7%] z-40 flex items-center gap-[1.2vw] pointer-events-none">
+        <div className="h-[0.65vw] w-[0.65vw] rounded-full bg-[#ff6a32]" />
+        <span className="mono-face text-[1.05vw] tracking-cinematic text-[#f5f0e8]/78">NBA JOSH</span>
+        <span className="mono-face text-[0.82vw] tracking-[0.22em] text-[#9bdae2]/60">THE ONE / 001</span>
       </div>
-
-      {/* NBA Josh (Bottom Right) */}
-      <motion.div
-        className="absolute bottom-[5%] right-[5%] w-[40%] h-[60%] overflow-hidden border border-[#e63b2e]/20"
-        animate={{
-          x: sceneIndex === 3 ? '100vw' : 0,
-          opacity: sceneIndex === 3 ? [1, 1, 0] : 1,
-        }}
-        transition={{ duration: 2, ease: 'easeInOut', delay: sceneIndex === 3 ? 1 : 0 }}
-      >
-        <motion.div className="absolute inset-0 bg-gradient-to-tr from-[#e63b2e]/20 to-transparent mix-blend-overlay z-10" />
-        <motion.img
-          src={joshImg}
-          className="w-full h-full object-cover object-top"
-          animate={{ scale: sceneIndex === 3 ? [1, 1.2] : [1, 1.05] }}
-          transition={{
-            duration: SCENE_DURATIONS[baseSceneKey] / 1000,
-            ease: 'linear',
-          }}
-        />
-      </motion.div>
-
-      {/* Film grain */}
-      <div className="absolute inset-0 film-grain z-50 pointer-events-none" />
+      <div className="absolute top-[10.5%] right-[7%] z-40 text-right pointer-events-none">
+        <div className="mono-face text-[0.8vw] tracking-[0.26em] text-[#9bdae2]/65">NIGHT SIGNAL</div>
+        <div className="mono-face mt-[0.45vw] text-[0.8vw] tracking-[0.18em] text-[#f5f0e8]/45">15 SEC / LOOP</div>
+      </div>
 
       {/* Letterbox */}
-      <div className="absolute top-0 left-0 w-full h-[8%] bg-black z-40 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-full h-[8%] bg-black z-40 pointer-events-none" />
+      <div className="absolute top-0 left-0 w-full h-[7%] bg-[#071218]/95 z-40 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-full h-[7%] bg-[#071218]/95 z-40 pointer-events-none" />
 
       {/* REC Indicator */}
-      <div className="absolute top-[10%] left-[8%] z-40 flex items-center gap-2 font-mono text-[1.5vw] text-[#e63b2e] pointer-events-none">
+      <div className="absolute bottom-[10.5%] left-[7%] z-40 flex items-center gap-[0.7vw] mono-face text-[0.82vw] tracking-[0.22em] text-[#ff6a32] pointer-events-none">
         <motion.div
-          className="w-3 h-3 rounded-full bg-[#e63b2e]"
+          className="h-[0.55vw] w-[0.55vw] rounded-full bg-[#ff6a32]"
           animate={{ opacity: [1, 0, 1] }}
           transition={{ duration: 1, repeat: Infinity }}
         />
@@ -138,14 +167,16 @@ export default function VideoTemplate({
       </div>
 
       {/* Timecode */}
-      <div className="absolute top-[10%] right-[5%] z-40 font-mono text-[1.5vw] text-white/50 pointer-events-none">
-        TC: 01:23:45:00
+      <div className="absolute bottom-[10.5%] right-[7%] z-40 mono-face text-[0.82vw] tracking-[0.18em] text-[#f5f0e8]/48 pointer-events-none">
+        TC: 00:00:{String(Math.max(0, Math.floor(currentScene * 3.75))).padStart(2, '0')}
       </div>
 
       {/* Scene content */}
       <AnimatePresence mode="popLayout">
-        {SceneComponent && <SceneComponent key={currentSceneKey} />}
+        {SceneComponent && <SceneComponent key={currentSceneKey} photos={PHOTOS} />}
       </AnimatePresence>
+
+      <div className="absolute inset-0 film-grain z-50" />
 
       {/* Audio */}
       <audio
