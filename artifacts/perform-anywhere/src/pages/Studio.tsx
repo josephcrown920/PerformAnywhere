@@ -30,13 +30,12 @@ const MODELS = [
   { id: "fal-kling",       providerKey: "FAL_KEY", label: "Kling Pro (fal)",    badge: "Fal",     note: "fal.ai · text or image to video" },
   { id: "hailuo",          providerKey: "FAL_KEY", label: "Hailuo (Minimax)",  badge: "Alt",     note: "~3–5 min · different style" },
   { id: "fal-wan",         providerKey: "FAL_KEY", label: "Wan",                badge: "Fal",     note: "fal.ai · cinematic motion" },
+  { id: "fal-omnihuman",   providerKey: "FAL_KEY", label: "OmniHuman",          badge: "Animate", note: "fal.ai · identity image + audio" },
 ] as const;
 
 const COMING_MODELS = [
   { label: "Flux", note: "Available in Image Orchestrate via fal.ai" },
   { label: "Seedream", note: "Available in Image Orchestrate via fal.ai" },
-  { label: "OmniHuman", note: "Needs identity image and audio input" },
-  { label: "Kling LipSync", note: "Needs source video and audio input" },
 ] as const;
 
 const WIZARD_STEPS = [
@@ -197,6 +196,8 @@ export default function Studio() {
     }
   }
 
+  const isOmniHumanSelected = selectedModel === "fal-omnihuman";
+
   async function handleSubmit() {
     setSubmitting(true);
     try {
@@ -217,6 +218,12 @@ export default function Studio() {
         const audioDuration = await getMediaDuration(files.audio!.file);
         if (videoDuration < 2 || videoDuration > 10) throw new Error("Lip-sync video must be between 2 and 10 seconds.");
         if (audioDuration < 2 || audioDuration > 60) throw new Error("Lip-sync audio must be between 2 and 60 seconds.");
+      }
+      if (isOmniHumanSelected) {
+        if (!files.identity) throw new Error("OmniHuman requires an identity image (upload in Assets).");
+        if (!files.audio) throw new Error("OmniHuman requires an audio track (upload in Assets).");
+        const audioDuration = await getMediaDuration(files.audio.file);
+        if (audioDuration > 30) throw new Error("OmniHuman audio must be 30 seconds or shorter.");
       }
       const clientId = getClientId();
       const workflow = getWorkflow(workflowId);
@@ -269,7 +276,8 @@ export default function Studio() {
     }
   }
 
-  const canGoNext   = !lipSync || (!!files.performance && !!files.audio);
+  const canGoNext = (!lipSync || (!!files.performance && !!files.audio)) &&
+    (!isOmniHumanSelected || (!!files.identity && !!files.audio));
   const activeModel = MODELS.find((m) => m.id === selectedModel) ?? MODELS[0];
   const activeWorkflow = getWorkflow(workflowId);
 
@@ -598,7 +606,7 @@ export default function Studio() {
               <ReviewRow label="Outfit"      value={files.outfit?.file.name ?? "—"} />
               <ReviewRow label="Scene ref"   value={files.scene?.file.name ?? "—"} />
               <ReviewRow label="Audio"       value={files.audio?.file.name ?? "—"} />
-              <ReviewRow label="Lip sync"    value={lipSync ? "Kling LipSync via fal.ai" : "Off"} highlight={lipSync} />
+              {!isOmniHumanSelected && <ReviewRow label="Lip sync" value={lipSync ? "Kling LipSync via fal.ai" : "Off"} highlight={lipSync} />}
               {customPrompt
                 ? <ReviewRow label="Prompt"     value={customPrompt} />
                 : <>

@@ -17,16 +17,31 @@ The app is `artifacts/perform-anywhere` (frontend) + `artifacts/api-server` (bac
 
 **How to apply:** never show a model as functional unless its exact endpoint, required inputs, and output mapping are implemented and its provider is configured.
 
-## Kling LipSync contract
+## Kling LipSync contract (live)
 - fal endpoint: `fal-ai/kling-video/lipsync/audio-to-video`.
 - Required inputs are `video_url` and `audio_url`; output is `video.url`.
 - Input video must be MP4/MOV, 2–10 seconds, at most 100 MB.
 - Input audio must be 2–60 seconds, at most 5 MB, using MP3/WAV/OGG/M4A/AAC.
-- Lip-sync jobs are dedicated transformations and must not fall back to text/image-to-video adapters.
+- Enabled via the lip-sync toggle in Studio Step 2, not via the model picker.
+- Lip-sync jobs route exclusively to fal — no fallback chain.
 
-**Why:** sending lip-sync inputs through the generic fallback chain can silently generate unrelated video instead of synchronizing the supplied performance.
+## OmniHuman contract (live)
+- fal endpoint: `fal-ai/bytedance/omnihuman`, model alias `fal-omnihuman`.
+- Required inputs are `image_url` (identity) and `audio_url`; output is `video.url`.
+- Audio must be under 30 seconds. No MB limit documented by fal.
+- Appears as a selectable model in Studio Step 2 (requires fal configured).
+- OmniHuman jobs route exclusively to fal — no fallback chain.
+- Client validation: requires identity + audio files before submit; duration checked client-side.
 
-**How to apply:** require both stored assets, sign both URLs server-side, route only to the dedicated fal model, and persist its returned video through the normal render result flow.
+## Performance video as motion reference (live)
+- When a performance video is uploaded but no identity image is provided, the render job signs the performance video and passes it as `options.videoUrl`.
+- The fal adapter routes this to the image-to-video model endpoint (e.g. `fal-ai/wan/v2.7/image-to-video`) using `video_url` in the payload.
+- `image_url` and `video_url` are mutually exclusive in the fal payload — the adapter now sends only one or the other.
+
+## Signed-URL security (fixed)
+- Both `/api/render/signed-url/render` and `/api/render/signed-url/asset` now require a valid `clientId`.
+- Path ownership is always enforced: path must start with `${clientId}/` or the request is rejected 403.
+- `api.ts` signatures updated to `clientId: string` (non-optional) matching server enforcement.
 
 ## Historical keyless capability asymmetry
 - **Image** has a reliable keyless provider (`image.pollinations.ai`) — works with zero keys / zero credits, fast (sub-second). Keep this as the free image default.

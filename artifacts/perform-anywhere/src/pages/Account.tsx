@@ -94,10 +94,40 @@ export default function Account() {
           </div>
         </section>
 
+        {/* Database setup */}
+        <section className="rounded-lg border border-amber-500/20 bg-amber-500/5 overflow-hidden">
+          <div className="px-6 py-4 border-b border-amber-500/15">
+            <h2 className="font-semibold text-amber-300/90 text-sm">Database setup required</h2>
+          </div>
+          <div className="px-6 py-5 space-y-3 text-sm text-muted-foreground">
+            <p>
+              The render pipeline requires four columns that may be missing from your Supabase database.
+              Without them, renders silently fail or disappear from the library.
+            </p>
+            <ol className="list-decimal ml-5 space-y-1 text-xs leading-relaxed">
+              <li>Open your <a href="https://supabase.com/dashboard/project/dgtnkkarlwufxawfaybb/sql/new" target="_blank" rel="noopener noreferrer" className="underline text-amber-300/80 hover:text-amber-300">Supabase SQL editor</a></li>
+              <li>Paste and run the contents of <code className="rounded bg-muted px-1 py-0.5 text-[11px]">artifacts/api-server/migrations/002_render_pipeline_columns.sql</code></li>
+            </ol>
+            <p className="text-xs">This is a one-time <code className="rounded bg-muted px-1 py-0.5">ALTER TABLE … ADD COLUMN IF NOT EXISTS</code> — safe to run more than once.</p>
+          </div>
+        </section>
+
+        {/* Vast.ai status */}
+        <section className="rounded-lg border border-border/50 bg-card overflow-hidden">
+          <div className="px-6 py-4 border-b border-border/30">
+            <h2 className="font-semibold text-sm">Vast.ai GPU — pending deployment</h2>
+          </div>
+          <div className="px-6 py-5 text-sm text-muted-foreground space-y-2">
+            <p>The Vast.ai API key is configured and the CLI is authenticated. Video cannot route through Vast until a serverless worker is deployed and its endpoint URL is provided.</p>
+            <p className="text-xs">To enable: deploy a video-generation worker on Vast.ai (or RunPod), then add <code className="rounded bg-muted px-1 py-0.5">RUNPOD_API_KEY</code> + <code className="rounded bg-muted px-1 py-0.5">RUNPOD_ENDPOINT_ID</code> to Secrets. The render chain will pick it up automatically.</p>
+          </div>
+        </section>
+
         {/* Hint */}
         <p className="text-xs text-muted-foreground px-1">
-          At minimum add <code className="rounded bg-muted px-1 py-0.5">KLING_ACCESS_KEY</code> +{" "}
-          <code className="rounded bg-muted px-1 py-0.5">KLING_SECRET_KEY</code> to render performances,
+          fal.ai is connected via Replit connector and powers video, OmniHuman, and Kling LipSync.
+          Add <code className="rounded bg-muted px-1 py-0.5">KLING_ACCESS_KEY</code> +{" "}
+          <code className="rounded bg-muted px-1 py-0.5">KLING_SECRET_KEY</code> for direct Kling,
           and <code className="rounded bg-muted px-1 py-0.5">PAYSTACK_SECRET_KEY</code> to accept payments.
         </p>
       </main>

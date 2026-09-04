@@ -76,6 +76,7 @@ router.post("/start", async (req, res) => {
     "fal-wan",
     "fal-seedance",
     "fal-kling",
+    "fal-omnihuman",
   ];
   const model = requestedModel && ALLOWED_MODELS.includes(requestedModel) ? requestedModel : "seedance-lite";
   const duration = rawOptions?.duration === 10 ? 10 : 5;
@@ -105,6 +106,8 @@ router.post("/start", async (req, res) => {
     .select("kind,storage_path,mime_type")
     .eq("project_id", projectId);
 
+  const ALLOWED_AUDIO_TYPES = new Set(["audio/mpeg", "audio/wav", "audio/x-wav", "audio/ogg", "audio/mp4", "audio/aac", "audio/x-m4a"]);
+
   if (lipSync) {
     const performance = (assets ?? []).find((asset) => asset.kind === "performance");
     const audio = (assets ?? []).find((asset) => asset.kind === "audio");
@@ -115,12 +118,25 @@ router.post("/start", async (req, res) => {
       });
     }
     const allowedVideoTypes = new Set(["video/mp4", "video/quicktime"]);
-    const allowedAudioTypes = new Set(["audio/mpeg", "audio/wav", "audio/x-wav", "audio/ogg", "audio/mp4", "audio/aac", "audio/x-m4a"]);
     if (!performance.mime_type || !allowedVideoTypes.has(performance.mime_type)) {
       return res.status(400).json({ error: "invalid_lip_sync_video", message: "Lip-sync video must be an MP4 or MOV file." });
     }
-    if (!audio.mime_type || !allowedAudioTypes.has(audio.mime_type)) {
+    if (!audio.mime_type || !ALLOWED_AUDIO_TYPES.has(audio.mime_type)) {
       return res.status(400).json({ error: "invalid_lip_sync_audio", message: "Lip-sync audio must be MP3, WAV, OGG, M4A, or AAC." });
+    }
+  }
+
+  if (model === "fal-omnihuman") {
+    const identity = (assets ?? []).find((asset) => asset.kind === "identity");
+    const audio = (assets ?? []).find((asset) => asset.kind === "audio");
+    if (!identity) {
+      return res.status(400).json({ error: "omnihuman_identity_required", message: "OmniHuman requires an identity image." });
+    }
+    if (!audio) {
+      return res.status(400).json({ error: "omnihuman_audio_required", message: "OmniHuman requires an audio track (under 30 seconds)." });
+    }
+    if (!audio.mime_type || !ALLOWED_AUDIO_TYPES.has(audio.mime_type)) {
+      return res.status(400).json({ error: "invalid_omnihuman_audio", message: "OmniHuman audio must be MP3, WAV, OGG, M4A, or AAC." });
     }
   }
 
@@ -144,7 +160,7 @@ router.post("/start", async (req, res) => {
   const { data: render, error: renderInsErr } = await sb.from("project_renders").insert({
     project_id: projectId,
     client_id: clientId,
-    provider: lipSync ? "fal" : modelToProviderName(model),
+    provider: (lipSync || model === "fal-omnihuman") ? "fal" : modelToProviderName(model),
     status: "queued",
     prompt,
   }).select("id").single();
@@ -161,7 +177,7 @@ router.post("/start", async (req, res) => {
     assets: assets ?? [],
     sb,
     model,
-    renderOptions: { duration, aspectRatio, motionStrength, lipSync },
+    renderOptions: { duration, aspectRatio, motionStrength, lipSync, isOmniHuman: model === "fal-omnihuman" },
   }).catch((err) => {
     console.error("[render] unhandled background error", err);
   });
@@ -185,6 +201,7 @@ async function startRenderJob(opts: {
     aspectRatio: "16:9" | "9:16" | "1:1";
     motionStrength: number;
     lipSync: boolean;
+    isOmniHuman: boolean;
   };
 }) {
   const { projectId, clientId, renderId, assets, sb, preferredProvider, model: requestModel, renderOptions } = opts;
@@ -221,15 +238,18 @@ async function startRenderJob(opts: {
     // Fallback chain: Kling → WAN → Veo 2 → Sora → HuggingFace (Fal excluded)
     // Route the user's chosen model to its real provider; the rest stay as fallback.
     const isLipSync = renderOptions?.lipSync === true;
+    const isOmniHuman = renderOptions?.isOmniHuman === true || chosenModel === "fal-omnihuman";
     if (isLipSync && (!performanceUrl || !audioUrl)) throw new Error("Lip sync requires signed video and audio inputs.");
-    const primaryProvider = isLipSync ? "fal" : (preferredProvider ?? modelToProviderName(chosenModel));
-    const providerOrder = isLipSync
+    if (isOmniHuman && (!identityUrl || !audioUrl)) throw new Error("OmniHuman requires a signed identity image and an audio track.");
+    const primaryProvider = (isLipSync || isOmniHuman) ? "fal" : (preferredProvider ?? modelToProviderName(chosenModel));
+    const providerOrder = (isLipSync || isOmniHuman)
       ? ["fal"]
       : [primaryProvider, ...["fal", "kling", "seedance", "runpod", "wan", "veo", "sora", "huggingface"].filter((p) => p !== primaryProvider)];
 
     const modelForProvider = (p: string) => {
       if (p === "kling") return chosenModel.startsWith("kling") ? chosenModel : "kling-v1-6-std";
       if (p === "fal" && isLipSync) return "fal-ai/kling-video/lipsync/audio-to-video";
+      if (p === "fal" && isOmniHuman) return "fal-omnihuman";
       if (p === "fal" && chosenModel.startsWith("fal-")) return chosenModel;
       if (p === "fal") return "fal-ai/kling-video/v1.6/pro/text-to-video";
       return p;
@@ -241,8 +261,15 @@ async function startRenderJob(opts: {
       motionStrength,
     };
     if (identityUrl) options.imageUrl = identityUrl;
+    // When no identity image is uploaded, use the performance video as a motion-reference
+    // input for models that support video-to-video (e.g. Wan v2.7 i2v).
+    if (!identityUrl && !isLipSync && !isOmniHuman && performanceUrl) options.videoUrl = performanceUrl;
     if (isLipSync) {
       options.videoUrl = performanceUrl;
+      options.audioUrl = audioUrl;
+    }
+    if (isOmniHuman) {
+      // imageUrl already set from identityUrl above; pass audio
       options.audioUrl = audioUrl;
     }
 
@@ -445,7 +472,7 @@ router.post("/retry", async (req, res) => {
   let clientId: string;
   try { clientId = assertClientId(rawCid); } catch { return res.status(400).json({ error: "invalid_client_id" }); }
 
-  const ALLOWED = ["seedance", "runpod", "kling", "wan", "veo", "sora", "huggingface"];
+  const ALLOWED = ["fal", "seedance", "runpod", "kling", "wan", "veo", "sora", "huggingface"];
   if (!ALLOWED.includes(provider)) return res.status(400).json({ error: "invalid_provider" });
 
   const sb = createAnonClient();
@@ -507,13 +534,9 @@ router.post("/retry", async (req, res) => {
 router.post("/signed-url/render", async (req, res) => {
   const { path, clientId: rawCid } = req.body as { path: string; clientId?: unknown };
   if (!path || typeof path !== "string") return res.status(400).json({ error: "path required" });
-
-  // Validate ownership: path must start with the requesting client's UUID prefix
-  let clientId: string | null = null;
-  try { if (rawCid) clientId = assertClientId(rawCid); } catch { /* optional */ }
-  if (clientId && !path.startsWith(`${clientId}/`)) {
-    return res.status(403).json({ error: "forbidden" });
-  }
+  let clientId: string;
+  try { clientId = assertClientId(rawCid); } catch { return res.status(400).json({ error: "invalid_client_id" }); }
+  if (!path.startsWith(`${clientId}/`)) return res.status(403).json({ error: "forbidden" });
 
   const sb = createAnonClient();
   const { data, error } = await sb.storage.from(RENDER_BUCKET).createSignedUrl(path, 3600);
@@ -526,12 +549,9 @@ router.post("/signed-url/render", async (req, res) => {
 router.post("/signed-url/asset", async (req, res) => {
   const { path, clientId: rawCid } = req.body as { path: string; clientId?: unknown };
   if (!path || typeof path !== "string") return res.status(400).json({ error: "path required" });
-
-  let clientId: string | null = null;
-  try { if (rawCid) clientId = assertClientId(rawCid); } catch { /* optional */ }
-  if (clientId && !path.startsWith(`${clientId}/`)) {
-    return res.status(403).json({ error: "forbidden" });
-  }
+  let clientId: string;
+  try { clientId = assertClientId(rawCid); } catch { return res.status(400).json({ error: "invalid_client_id" }); }
+  if (!path.startsWith(`${clientId}/`)) return res.status(403).json({ error: "forbidden" });
 
   const sb = createAnonClient();
   const { data, error } = await sb.storage.from(ASSET_BUCKET).createSignedUrl(path, 3600);
