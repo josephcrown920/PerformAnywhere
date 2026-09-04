@@ -10,30 +10,30 @@
   --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Space Mono", ui-monospace, monospace;
 
-  --color-aurora-pink: var(--aurora-pink);
-  --color-aurora-purple: var(--aurora-purple);
-  --color-aurora-cyan: var(--aurora-cyan);
+  --color-aurora-pink: hsl(var(--aurora-pink));
+  --color-aurora-purple: hsl(var(--aurora-purple));
+  --color-aurora-cyan: hsl(var(--aurora-cyan));
 }
 
 :root, .dark {
-  --background: 285 40% 4%;
-  --foreground: 285 10% 95%;
-  --card: 285 30% 7%;
-  --card-foreground: 285 10% 95%;
-  --popover: 285 30% 7%;
-  --popover-foreground: 285 10% 95%;
+  --background: 260 20% 4%;
+  --foreground: 260 10% 95%;
+  --card: 260 20% 6%;
+  --card-foreground: 260 10% 95%;
+  --popover: 260 20% 6%;
+  --popover-foreground: 260 10% 95%;
   --primary: 315 100% 60%;
   --primary-foreground: 0 0% 100%;
   --secondary: 275 80% 60%;
   --secondary-foreground: 0 0% 100%;
-  --muted: 285 20% 12%;
-  --muted-foreground: 285 15% 60%;
-  --accent: 295 40% 12%;
-  --accent-foreground: 285 10% 95%;
+  --muted: 260 20% 12%;
+  --muted-foreground: 260 15% 65%;
+  --accent: 260 30% 12%;
+  --accent-foreground: 260 10% 95%;
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
-  --border: 285 20% 15%;
-  --input: 285 20% 12%;
+  --border: 260 15% 15%;
+  --input: 260 15% 12%;
   --ring: 315 100% 60%;
 
   --aurora-pink: 315 100% 60%;
@@ -59,7 +59,7 @@
 
 @layer utilities {
   .text-gradient {
-    background: linear-gradient(to right, hsl(var(--aurora-pink)), hsl(var(--aurora-purple)), hsl(var(--aurora-cyan)));
+    background: linear-gradient(135deg, hsl(var(--aurora-pink)), hsl(var(--aurora-purple)), hsl(var(--aurora-cyan)));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -67,16 +67,17 @@
   }
   
   .bg-glass {
-    background: rgba(10, 5, 16, 0.7);
+    background: rgba(10, 5, 12, 0.6);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .aurora-grid {
-    background-size: 60px 60px;
+    background-size: 40px 40px;
     background-image:
-      linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+      linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
   }
 }
 
@@ -87,7 +88,7 @@
 
 @keyframes scan-face {
   0% { transform: translateY(0%); }
-  50% { transform: translateY(8000%); }
+  50% { transform: translateY(1000%); }
   100% { transform: translateY(0%); }
 }
 
@@ -98,6 +99,11 @@
 @keyframes float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-15px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.5; box-shadow: 0 0 20px rgba(255, 105, 180, 0.2); }
+  50% { opacity: 1; box-shadow: 0 0 40px rgba(255, 105, 180, 0.5); }
 }
 
 @media (prefers-reduced-motion: reduce) {
