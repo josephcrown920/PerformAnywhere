@@ -10,6 +10,16 @@ const ASSET_BUCKET = "uploads";
 
 type Asset = { kind: string; storage_path: string };
 
+function modelToProviderName(model: string): string {
+  if (model.startsWith("kling")) return "kling";
+  if (model.startsWith("seedance")) return "seedance";
+  if (model === "hailuo") return "hailuo";
+  if (model === "fal") return "fal";
+  if (model === "wan") return "wan";
+  if (model === "veo") return "veo";
+  return "seedance";
+}
+
 async function signAsset(sb: ReturnType<typeof createAnonClient>, path: string): Promise<string | null> {
   const { data } = await sb.storage.from(ASSET_BUCKET).createSignedUrl(path, 3600);
   return data?.signedUrl ?? null;
@@ -39,13 +49,43 @@ function buildPrompt(opts: {
 // ─── POST /api/render/start ───────────────────────────────────────────────────
 
 router.post("/start", async (req, res) => {
-  const { clientId: rawCid, projectId, model: requestedModel } = req.body as { clientId: unknown; projectId: string; model?: string };
+  const { clientId: rawCid, projectId, model: requestedModel, options: rawOptions } = req.body as {
+    clientId: unknown;
+    projectId: string;
+    model?: string;
+    options?: {
+      duration?: unknown;
+      aspectRatio?: unknown;
+      motionStrength?: unknown;
+      lipSync?: unknown;
+    };
+  };
   let clientId: string;
   try { clientId = assertClientId(rawCid); } catch { return res.status(400).json({ error: "invalid_client_id" }); }
   if (!projectId) return res.status(400).json({ error: "projectId required" });
 
-  const ALLOWED_MODELS = ["seedance-lite", "kling-v1-6-std", "kling-v1-6-pro", "hailuo", "fal"];
+  const ALLOWED_MODELS = [
+    "seedance-lite",
+    "kling-v1-6-std",
+    "kling-v1-6-pro",
+    "hailuo",
+    "fal",
+    "wan",
+    "veo",
+  ];
   const model = requestedModel && ALLOWED_MODELS.includes(requestedModel) ? requestedModel : "seedance-lite";
+  const duration = rawOptions?.duration === 10 ? 10 : 5;
+  const aspectRatio = ["16:9", "9:16", "1:1"].includes(String(rawOptions?.aspectRatio))
+    ? String(rawOptions?.aspectRatio) as "16:9" | "9:16" | "1:1"
+    : "16:9";
+  const motionStrength = Math.max(1, Math.min(10, Number(rawOptions?.motionStrength) || 5));
+  const lipSync = rawOptions?.lipSync === true;
+  if (lipSync) {
+    return res.status(400).json({
+      error: "lip_sync_provider_not_configured",
+      message: "Lip sync needs a connected provider and an audio input. Connect Replicate to enable it.",
+    });
+  }
 
   const sb = createAnonClient();
 
@@ -106,11 +146,12 @@ router.post("/start", async (req, res) => {
     assets: assets ?? [],
     sb,
     model,
+    renderOptions: { duration, aspectRatio, motionStrength },
   }).catch((err) => {
     console.error("[render] unhandled background error", err);
   });
 
-  return res.json({ ok: true, provider: "kling", jobId: renderId ?? "" });
+  return res.json({ ok: true, provider: modelToProviderName(model), jobId: renderId ?? "" });
 });
 
 // ─── Background render job ────────────────────────────────────────────────────
@@ -124,9 +165,16 @@ async function startRenderJob(opts: {
   sb: ReturnType<typeof createAnonClient>;
   preferredProvider?: string;
   model?: string;
+  renderOptions?: {
+    duration: 5 | 10;
+    aspectRatio: "16:9" | "9:16" | "1:1";
+    motionStrength: number;
+  };
 }) {
-  const { projectId, clientId, renderId, prompt, assets, sb, preferredProvider, model: requestModel } = opts;
+  const { projectId, clientId, renderId, assets, sb, preferredProvider, model: requestModel, renderOptions } = opts;
   const chosenModel = requestModel ?? "kling-v1-6-std";
+  const motionStrength = renderOptions?.motionStrength ?? 5;
+  const prompt = `${opts.prompt}\n\nMotion direction: ${motionStrength}/10 intensity; preserve intentional body timing and natural facial movement.`;
 
   const updateStatus = (status: string, extra: Record<string, unknown> = {}) =>
     Promise.all([
@@ -152,15 +200,7 @@ async function startRenderJob(opts: {
 
     // Fallback chain: Kling → WAN → Veo 2 → Sora → HuggingFace (Fal excluded)
     // Route the user's chosen model to its real provider; the rest stay as fallback.
-    const modelToProvider = (m: string): string => {
-      if (m.startsWith("kling")) return "kling";
-      if (m.startsWith("seedance")) return "seedance";
-      if (m === "hailuo") return "hailuo";
-      if (m === "fal") return "fal";
-      if (m === "wan") return "wan";
-      return "seedance";
-    };
-    const primaryProvider = preferredProvider ?? modelToProvider(chosenModel);
+    const primaryProvider = preferredProvider ?? modelToProviderName(chosenModel);
     const providerOrder = [
       primaryProvider,
       ...["seedance", "runpod", "kling", "wan", "veo", "sora", "huggingface"].filter((p) => p !== primaryProvider),
@@ -171,7 +211,11 @@ async function startRenderJob(opts: {
       return p;
     };
 
-    const options: Record<string, unknown> = { duration: 5 };
+    const options: Record<string, unknown> = {
+      duration: renderOptions?.duration ?? 5,
+      aspectRatio: renderOptions?.aspectRatio ?? "16:9",
+      motionStrength,
+    };
     if (identityUrl) options.imageUrl = identityUrl;
 
     let lastError = "no provider succeeded";

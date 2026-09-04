@@ -95,7 +95,17 @@ export const api = {
   initPaystack: (body: { clientId: string; amountNaira: number; email: string }) =>
     post<PaystackInitResult>("/orchestrate/paystack", body),
 
-  startRender: (body: { clientId: string; projectId: string; model?: string }) =>
+  startRender: (body: {
+    clientId: string;
+    projectId: string;
+    model?: string;
+    options?: {
+      duration?: 5 | 10;
+      aspectRatio?: "16:9" | "9:16" | "1:1";
+      motionStrength?: number;
+      lipSync?: boolean;
+    };
+  }) =>
     post<StartRenderResult>("/render/start", body),
 
   pollRender: (body: { clientId: string; projectId: string }) =>

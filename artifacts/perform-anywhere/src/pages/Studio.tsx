@@ -9,7 +9,7 @@ import {
   clearDraft,
 } from "@/lib/draft-storage";
 import { toast } from "sonner";
-import { Loader2, Sparkles, Upload, X, CheckCircle2, Zap, Star, History } from "lucide-react";
+import { Loader2, Sparkles, Upload, X, CheckCircle2, Zap, Star, History, Move3d, Ratio, Timer, AudioLines, LockKeyhole } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 import { WORKFLOWS, getWorkflow } from "@/lib/workflows";
 
@@ -24,10 +24,19 @@ const STYLE_CHIPS = [
 ];
 
 const MODELS = [
-  { id: "seedance-lite",   label: "Seedance Lite",     badge: "Budget",  note: "~1–2 min · lowest cost" },
-  { id: "kling-v1-6-std",  label: "Kling v1.6",       badge: "Fast",    note: "~2–3 min · standard quality" },
-  { id: "kling-v1-6-pro",  label: "Kling v1.6 Pro",    badge: "Quality", note: "~4–6 min · best quality" },
-  { id: "hailuo",          label: "Hailuo (Minimax)",  badge: "Alt",     note: "~3–5 min · different style" },
+  { id: "seedance-lite",   providerKey: "REPLICATE_API_TOKEN", label: "Seedance Lite",     badge: "Budget",  note: "~1–2 min · lowest cost" },
+  { id: "kling-v1-6-std",  providerKey: "KLING_ACCESS_KEY", label: "Kling v1.6",       badge: "Fast",    note: "~2–3 min · standard quality" },
+  { id: "kling-v1-6-pro",  providerKey: "KLING_ACCESS_KEY", label: "Kling v1.6 Pro",    badge: "Quality", note: "~4–6 min · best quality" },
+  { id: "hailuo",          providerKey: "FAL_KEY", label: "Hailuo (Minimax)",  badge: "Alt",     note: "~3–5 min · different style" },
+  { id: "wan",             providerKey: "REPLICATE_API_TOKEN", label: "Wan 2.1",           badge: "Motion",  note: "Replicate · cinematic motion" },
+  { id: "veo",             providerKey: "GEMINI_API_KEY", label: "Gemini Veo",        badge: "Google",  note: "Google · text to video" },
+] as const;
+
+const COMING_MODELS = [
+  { label: "Flux", note: "Image generation model" },
+  { label: "Seedream", note: "Image generation model" },
+  { label: "Seedance 2", note: "Requires Replicate connection" },
+  { label: "OmniHuman", note: "Requires Replicate connection" },
 ] as const;
 
 const WIZARD_STEPS = [
@@ -43,12 +52,16 @@ export default function Studio() {
   const [files, setFiles]             = useState<Record<AssetKind, StagedFile | null>>({
     performance: null, identity: null, outfit: null, scene: null,
   });
-  const [selectedModel, setSelectedModel] = useState("seedance-lite");
+  const [selectedModel, setSelectedModel] = useState("kling-v1-6-std");
   const [workflowId, setWorkflowId] = useState("");
   const [scenePrompt, setScenePrompt]     = useState("");
   const [stylePrompt, setStylePrompt]     = useState("");
   const [customPrompt, setCustomPrompt]   = useState("");
   const [enhanced, setEnhanced]           = useState("");
+  const [duration, setDuration]           = useState<5 | 10>(5);
+  const [aspectRatio, setAspectRatio]     = useState<"16:9" | "9:16" | "1:1">("16:9");
+  const [motionStrength, setMotionStrength] = useState(5);
+  const [configuredProviders, setConfiguredProviders] = useState<Set<string> | null>(null);
   const [enhancing, setEnhancing]         = useState(false);
   const [submitting, setSubmitting]       = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
@@ -63,6 +76,20 @@ export default function Studio() {
       window.removeEventListener("dragover", prevent);
       window.removeEventListener("drop", prevent);
     };
+  }, []);
+
+  useEffect(() => {
+    api.providerStatus()
+      .then((providers) => {
+        const configured = new Set(providers.filter((provider) => provider.configured).map((provider) => provider.id));
+        setConfiguredProviders(configured);
+        setSelectedModel((current) => {
+          const currentModel = MODELS.find((model) => model.id === current);
+          if (currentModel && configured.has(currentModel.providerKey)) return current;
+          return MODELS.find((model) => configured.has(model.providerKey))?.id ?? current;
+        });
+      })
+      .catch(() => setConfiguredProviders(new Set()));
   }, []);
 
   // ── Restore draft on mount ───────────────────────────────────────────────────
@@ -139,7 +166,7 @@ export default function Studio() {
   async function handleClearDraft() {
     await clearDraft();
     setTitle("Untitled performance");
-    setSelectedModel("seedance-lite");
+    setSelectedModel("kling-v1-6-std");
     setWorkflowId("");
     setScenePrompt(""); setStylePrompt(""); setCustomPrompt(""); setEnhanced("");
     setStep(1);
@@ -206,7 +233,12 @@ export default function Studio() {
         );
       }
 
-      await api.startRender({ clientId, projectId: project.id, model: selectedModel });
+      await api.startRender({
+        clientId,
+        projectId: project.id,
+        model: selectedModel,
+        options: { duration, aspectRatio, motionStrength, lipSync: false },
+      });
       await clearDraft();
       toast.success("Render queued!");
       navigate(`/projects/${project.id}`);
@@ -309,12 +341,14 @@ export default function Studio() {
               <div className="grid gap-3 sm:grid-cols-3">
                 {MODELS.map((m) => {
                   const active = selectedModel === m.id;
+                  const configured = configuredProviders?.has(m.providerKey) ?? true;
                   return (
                     <button
                       key={m.id}
                       type="button"
-                      onClick={() => setSelectedModel(m.id)}
-                      className="relative flex flex-col items-start gap-1 rounded-xl p-4 text-left transition-all"
+                      onClick={() => configured && setSelectedModel(m.id)}
+                      disabled={!configured}
+                      className="relative flex flex-col items-start gap-1 rounded-xl p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-45"
                       style={{
                         background: active ? "oklch(0.58 0.26 290 / 0.20)" : "oklch(0.14 0.05 285)",
                         border: active ? "1.5px solid oklch(0.58 0.26 290 / 0.7)" : "1.5px solid oklch(0.28 0.07 285 / 0.5)",
@@ -330,11 +364,82 @@ export default function Studio() {
                         </span>
                       </div>
                       <span className="text-xs text-white/40">{m.note}</span>
+                      {!configured && <span className="mt-1 text-[10px] font-medium uppercase tracking-wider text-amber-300/70">Provider not connected</span>}
                       {active && <div className="absolute top-3 right-3 h-2 w-2 rounded-full animate-pulse" style={{ background: "oklch(0.65 0.30 330)" }} />}
                     </button>
                   );
                 })}
               </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-3">Motion controls</p>
+              <div className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.025] p-5 md:grid-cols-3">
+                <div>
+                  <label htmlFor="motion-strength" className="flex items-center justify-between text-sm font-semibold text-white">
+                    <span className="flex items-center gap-2"><Move3d className="h-4 w-4 text-pink-400" /> Motion</span>
+                    <span className="font-mono text-xs text-white/50">{motionStrength}/10</span>
+                  </label>
+                  <input
+                    id="motion-strength"
+                    type="range"
+                    min={1}
+                    max={10}
+                    value={motionStrength}
+                    onChange={(event) => setMotionStrength(Number(event.target.value))}
+                    className="mt-4 w-full accent-pink-500"
+                  />
+                  <p className="mt-2 text-xs text-white/35">Controls movement intensity and prompt adherence.</p>
+                </div>
+                <fieldset>
+                  <legend className="flex items-center gap-2 text-sm font-semibold text-white"><Timer className="h-4 w-4 text-cyan-400" /> Duration</legend>
+                  <div className="mt-3 flex gap-2">
+                    {[5, 10].map((seconds) => (
+                      <button key={seconds} type="button" onClick={() => setDuration(seconds as 5 | 10)}
+                        className={`min-h-10 flex-1 rounded-lg border text-sm font-medium transition ${duration === seconds ? "border-pink-400 bg-pink-500/15 text-white" : "border-white/10 text-white/45 hover:text-white"}`}>
+                        {seconds}s
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend className="flex items-center gap-2 text-sm font-semibold text-white"><Ratio className="h-4 w-4 text-violet-400" /> Frame</legend>
+                  <div className="mt-3 flex gap-2">
+                    {(["16:9", "9:16", "1:1"] as const).map((ratio) => (
+                      <button key={ratio} type="button" onClick={() => setAspectRatio(ratio)}
+                        className={`min-h-10 flex-1 rounded-lg border text-xs font-medium transition ${aspectRatio === ratio ? "border-cyan-400 bg-cyan-500/10 text-white" : "border-white/10 text-white/45 hover:text-white"}`}>
+                        {ratio}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-3">Specialist models</p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {COMING_MODELS.map((model) => (
+                  <div key={model.label} className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-white/65">{model.label}</span>
+                      <LockKeyhole className="h-3.5 w-3.5 text-white/25" aria-hidden="true" />
+                    </div>
+                    <p className="mt-1 text-xs text-white/30">{model.note}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+              <label className="flex cursor-pointer items-center justify-between gap-4">
+                <span>
+                  <span className="flex items-center gap-2 text-sm font-semibold text-white"><AudioLines className="h-4 w-4 text-pink-400" /> Lip sync</span>
+                  <span className="mt-1 block text-xs text-white/35">Requires a connected Replicate provider and audio input.</span>
+                </span>
+                <input type="checkbox" checked={false} disabled
+                  className="h-5 w-5 cursor-not-allowed accent-pink-500 opacity-40" aria-label="Lip sync unavailable until a provider is connected" />
+              </label>
             </div>
 
             <div>

@@ -504,7 +504,7 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
       mode,
       duration: String(options.duration ?? 5),
       prompt: String(prompt).slice(0, 2500),
-      cfg_scale: 0.5,
+      cfg_scale: Math.max(0.1, Math.min(1, Number(options.motionStrength ?? 5) / 10)),
     };
     if (hasImage) {
       body.image = options.imageUrl;
