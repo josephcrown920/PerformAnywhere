@@ -450,13 +450,19 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
           : model === "fal-kling"
             ? (options.imageUrl ? "fal-ai/kling-video/v1.6/pro/image-to-video" : "fal-ai/kling-video/v1.6/pro/text-to-video")
             : model;
-    const payload: Record<string, unknown> = {
-      prompt,
-      duration: options.duration ?? 5,
-      aspect_ratio: options.aspectRatio ?? "16:9",
-    };
+    const isKlingLipSync = resolvedModel === "fal-ai/kling-video/lipsync/audio-to-video";
+    if (isKlingLipSync && (!options.videoUrl || !options.audioUrl)) {
+      throw new Error("fal Kling LipSync requires videoUrl and audioUrl");
+    }
+    const payload: Record<string, unknown> = isKlingLipSync
+      ? { video_url: options.videoUrl, audio_url: options.audioUrl }
+      : {
+          prompt,
+          duration: options.duration ?? 5,
+          aspect_ratio: options.aspectRatio ?? "16:9",
+        };
     if (options.imageUrl) payload.image_url = options.imageUrl;
-    if (options.videoUrl) payload.video_url = options.videoUrl;
+    if (!isKlingLipSync && options.videoUrl) payload.video_url = options.videoUrl;
     if (options.negativePrompt) payload.negative_prompt = options.negativePrompt;
     const j = await falQueueWait(resolvedModel, payload);
     const url = (j.video as { url?: string })?.url

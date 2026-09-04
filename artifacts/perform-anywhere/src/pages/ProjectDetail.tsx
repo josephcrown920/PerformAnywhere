@@ -272,7 +272,7 @@ export default function ProjectDetail({ id }: { id: string }) {
           <aside className="space-y-6">
             <h2 className="text-sm font-semibold uppercase tracking-widest text-white/30">Reference inputs</h2>
             <div className="grid grid-cols-2 gap-3">
-              {(["performance", "identity", "outfit", "scene"] as const).map((kind) => {
+              {(["performance", "identity", "outfit", "scene", "audio"] as const).map((kind) => {
                 const url = assetUrls[kind];
                 const hasAsset = assets.find((a) => a.kind === kind);
                 return (
@@ -283,6 +283,8 @@ export default function ProjectDetail({ id }: { id: string }) {
                     {url ? (
                       kind === "performance" ? (
                         <video src={url} className="aspect-video w-full object-cover" muted playsInline autoPlay loop />
+                      ) : kind === "audio" ? (
+                        <div className="flex aspect-video items-center px-3"><audio src={url} className="w-full" controls preload="metadata" /></div>
                       ) : (
                         <img src={url} alt={kind} className="aspect-video w-full object-cover" />
                       )

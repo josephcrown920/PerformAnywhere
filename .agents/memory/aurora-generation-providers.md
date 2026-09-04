@@ -1,17 +1,37 @@
 ---
 name: Aurora generation provider model
-description: How the Perform Anywhere (Aurora) AI app routes generations across providers, why video/audio fail without keys, and the parallel lists that must stay in sync.
+description: How Perform Anywhere routes generation across ModelArk, fal.ai, Vast.ai, and direct Kling, including lip-sync input requirements.
 ---
 
 # Aurora (Perform Anywhere) generation provider model
 
 The app is `artifacts/perform-anywhere` (frontend) + `artifacts/api-server` (backend). Generations route through provider adapters with a fallback chain.
 
-## Keyless capability asymmetry (the #1 "why doesn't it work" cause)
+## Current provider boundary
+- ModelArk is the OpenAI-compatible text provider.
+- fal.ai is the primary managed media provider and must be called through the Replit connector proxy when no direct key exists.
+- Direct Kling remains supported where Kling credentials are configured.
+- Vast.ai tooling is authenticated, but application inference remains unavailable until a concrete deployment endpoint and worker contract exist.
+
+**Why:** provider labels must describe a real callable path; installed SDKs or authenticated CLIs alone do not make a model available in the product.
+
+**How to apply:** never show a model as functional unless its exact endpoint, required inputs, and output mapping are implemented and its provider is configured.
+
+## Kling LipSync contract
+- fal endpoint: `fal-ai/kling-video/lipsync/audio-to-video`.
+- Required inputs are `video_url` and `audio_url`; output is `video.url`.
+- Input video must be MP4/MOV, 2–10 seconds, at most 100 MB.
+- Input audio must be 2–60 seconds, at most 5 MB, using MP3/WAV/OGG/M4A/AAC.
+- Lip-sync jobs are dedicated transformations and must not fall back to text/image-to-video adapters.
+
+**Why:** sending lip-sync inputs through the generic fallback chain can silently generate unrelated video instead of synchronizing the supplied performance.
+
+**How to apply:** require both stored assets, sign both URLs server-side, route only to the dedicated fal model, and persist its returned video through the normal render result flow.
+
+## Historical keyless capability asymmetry
 - **Image** has a reliable keyless provider (`image.pollinations.ai`) — works with zero keys / zero credits, fast (sub-second). Keep this as the free image default.
 - **Text** only had a keyless provider (`text.pollinations.ai`), but that endpoint is unreliable: it's deprecating its free legacy GET API, exposes only ONE anonymous model (`openai-fast`, aliases incl. `openai`), and routinely returns 500/429/000 under load. Do NOT rely on it as the primary free text path. The reliable free text path is `gemini` (free Google AI Studio dev key) and `groq` (free key) — both already wired adapters, both in FREE_PROVIDERS so `credits_used=0`. No code change is needed to enable them; just set `GEMINI_API_KEY` / `GROQ_API_KEY`.
-- **Video and audio have NO keyless provider.** Every video adapter (fal, replicate, kling, hailuo, wan, runway, sora, veo, huggingface) and audio adapter (elevenlabs, replicate) throws `ProviderUnconfigured` ("provider_unconfigured:<name>") when its key is missing.
-- **Consequence:** video ("motion control" in user terms) and audio CANNOT generate until the user supplies at least one provider API key. This is configuration, not a code bug. Recommend `REPLICATE_API_TOKEN` (easiest — powers the `wan`/WAN 2.1 provider) or Kling / Gemini(Veo) / HuggingFace, since those are what the Studio render chain actually tries.
+- **Video and audio have NO anonymous provider.** They require a configured paid provider path. fal.ai is available through the Replit connector and must not be treated as a frontend API key.
 
 ## Free text keys: own-key, not the Replit AI integration
 The Replit AI Integrations Gemini proxy (`setupReplitAIIntegrations`) was blocked on this account by `awaiting_phone_verification`, so text uses the user's OWN free keys instead. Two gotchas worth remembering:
@@ -36,11 +56,11 @@ Migrations live in `api-server/migrations/*.sql` and are **applied manually in t
 **How to apply:** when render features fail, probe the live tables (anon `select` each expected column with `.limit(1)`; "column does not exist" = missing) before assuming a code bug — schema drift masquerades as code failure.
 **Gotcha — running `000_init_schema.sql` does NOT backfill columns:** it uses `create table if not exists`, so on a DB where the tables already exist (even partially), the whole CREATE is skipped and new columns are never added. After 000, the live DB was STILL missing `projects.output_path`/`selected_model` and `project_renders.prompt`/`provider_task_id`. The reliable fix is the ALTER-based `002_render_pipeline_columns.sql` (`add column if not exists`), which the user must run in the Supabase SQL editor.
 
-## No free video path exists — every wired video provider needs paid billing
-Confirmed live (keys present): with `REPLICATE_API_TOKEN` + `GEMINI_API_KEY` set, the Studio render chain still fails because **both** funded attempts are unpaid accounts:
+## No free video path exists
+Historical provider testing showed that configured credentials still fail when the downstream provider account has no funded inference capacity:
 - `wan` (Replicate) → HTTP 402 "Insufficient credit" → top up at replicate.com/account/billing (401 = bad key; 402 = key fine, account needs credit). WAN model: `wavespeedai/wan-2.1-t2v-480p` (t2v) / `-i2v-480p` (image supplied).
 - `veo` (Gemini `veo-2.0-generate-001`) → HTTP 400 FAILED_PRECONDITION "exclusively available to users with Google Cloud Platform billing enabled" → Veo is NOT in the free Gemini tier.
-**There is no keyless/free text-to-video option** (Pollinations is image/text only). Video is inherently a paid feature here; for a cost-sensitive user the cheapest already-wired path is a small Replicate balance (token already set ⇒ works automatically once funded). Don't keep re-investigating — the blocker is provider funding, not code.
+**There is no keyless/free text-to-video option** (Pollinations is image/text only). Distinguish provider configuration from provider funding when reporting failures.
 Render error-reporting lesson: the video fallback loop must preserve the error from a *configured* provider over trailing `provider_unconfigured:*` noise — otherwise the real, actionable wan/veo failure gets masked behind whichever unconfigured provider ran last. Keep that invariant if editing the loop.
 
 ## Known pre-existing issues (not from the generation fixes)

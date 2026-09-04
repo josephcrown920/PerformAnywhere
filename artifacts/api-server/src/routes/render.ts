@@ -8,7 +8,7 @@ const ASSET_BUCKET = "uploads";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-type Asset = { kind: string; storage_path: string };
+type Asset = { kind: string; storage_path: string; mime_type?: string | null };
 
 function modelToProviderName(model: string): string {
   if (model.startsWith("kling")) return "kling";
@@ -84,12 +84,6 @@ router.post("/start", async (req, res) => {
     : "16:9";
   const motionStrength = Math.max(1, Math.min(10, Number(rawOptions?.motionStrength) || 5));
   const lipSync = rawOptions?.lipSync === true;
-  if (lipSync) {
-    return res.status(400).json({
-      error: "lip_sync_provider_not_configured",
-      message: "Lip sync needs a source video and an audio input. fal.ai is connected; add both assets to enable it.",
-    });
-  }
 
   const sb = createAnonClient();
 
@@ -108,10 +102,27 @@ router.post("/start", async (req, res) => {
 
   const { data: assets } = await sb
     .from("project_assets")
-    .select("kind,storage_path")
+    .select("kind,storage_path,mime_type")
     .eq("project_id", projectId);
 
-  // Performance video is optional — generation works with just a prompt + optional identity photo
+  if (lipSync) {
+    const performance = (assets ?? []).find((asset) => asset.kind === "performance");
+    const audio = (assets ?? []).find((asset) => asset.kind === "audio");
+    if (!performance || !audio) {
+      return res.status(400).json({
+        error: "lip_sync_assets_required",
+        message: "Lip sync requires both a performance video and an audio track.",
+      });
+    }
+    const allowedVideoTypes = new Set(["video/mp4", "video/quicktime"]);
+    const allowedAudioTypes = new Set(["audio/mpeg", "audio/wav", "audio/x-wav", "audio/ogg", "audio/mp4", "audio/aac", "audio/x-m4a"]);
+    if (!performance.mime_type || !allowedVideoTypes.has(performance.mime_type)) {
+      return res.status(400).json({ error: "invalid_lip_sync_video", message: "Lip-sync video must be an MP4 or MOV file." });
+    }
+    if (!audio.mime_type || !allowedAudioTypes.has(audio.mime_type)) {
+      return res.status(400).json({ error: "invalid_lip_sync_audio", message: "Lip-sync audio must be MP3, WAV, OGG, M4A, or AAC." });
+    }
+  }
 
   await sb.from("projects").update({ status: "queued", error_message: null }).eq("id", projectId);
 
@@ -133,7 +144,7 @@ router.post("/start", async (req, res) => {
   const { data: render, error: renderInsErr } = await sb.from("project_renders").insert({
     project_id: projectId,
     client_id: clientId,
-    provider: "kling",
+    provider: lipSync ? "fal" : modelToProviderName(model),
     status: "queued",
     prompt,
   }).select("id").single();
@@ -150,7 +161,7 @@ router.post("/start", async (req, res) => {
     assets: assets ?? [],
     sb,
     model,
-    renderOptions: { duration, aspectRatio, motionStrength },
+    renderOptions: { duration, aspectRatio, motionStrength, lipSync },
   }).catch((err) => {
     console.error("[render] unhandled background error", err);
   });
@@ -173,6 +184,7 @@ async function startRenderJob(opts: {
     duration: 5 | 10;
     aspectRatio: "16:9" | "9:16" | "1:1";
     motionStrength: number;
+    lipSync: boolean;
   };
 }) {
   const { projectId, clientId, renderId, assets, sb, preferredProvider, model: requestModel, renderOptions } = opts;
@@ -196,22 +208,28 @@ async function startRenderJob(opts: {
   try {
     await updateStatus("running");
 
-    // Sign the identity photo — this is the correct still-image reference for image2video models
+    // Sign provider inputs only from assets already scoped to this project/client.
     const identityAsset = assets.find((a) => a.kind === "identity");
     const identityUrl = identityAsset ? await signAsset(sb, identityAsset.storage_path) : null;
+    const performanceAsset = assets.find((a) => a.kind === "performance");
+    const audioAsset = assets.find((a) => a.kind === "audio");
+    const performanceUrl = performanceAsset ? await signAsset(sb, performanceAsset.storage_path) : null;
+    const audioUrl = audioAsset ? await signAsset(sb, audioAsset.storage_path) : null;
 
     const { videoAdapters } = await import("../lib/orchestrate/providers.js");
 
     // Fallback chain: Kling → WAN → Veo 2 → Sora → HuggingFace (Fal excluded)
     // Route the user's chosen model to its real provider; the rest stay as fallback.
-    const primaryProvider = preferredProvider ?? modelToProviderName(chosenModel);
-    const providerOrder = [
-      primaryProvider,
-      ...["fal", "kling", "seedance", "runpod", "wan", "veo", "sora", "huggingface"].filter((p) => p !== primaryProvider),
-    ];
+    const isLipSync = renderOptions?.lipSync === true;
+    if (isLipSync && (!performanceUrl || !audioUrl)) throw new Error("Lip sync requires signed video and audio inputs.");
+    const primaryProvider = isLipSync ? "fal" : (preferredProvider ?? modelToProviderName(chosenModel));
+    const providerOrder = isLipSync
+      ? ["fal"]
+      : [primaryProvider, ...["fal", "kling", "seedance", "runpod", "wan", "veo", "sora", "huggingface"].filter((p) => p !== primaryProvider)];
 
     const modelForProvider = (p: string) => {
       if (p === "kling") return chosenModel.startsWith("kling") ? chosenModel : "kling-v1-6-std";
+      if (p === "fal" && isLipSync) return "fal-ai/kling-video/lipsync/audio-to-video";
       if (p === "fal" && chosenModel.startsWith("fal-")) return chosenModel;
       if (p === "fal") return "fal-ai/kling-video/v1.6/pro/text-to-video";
       return p;
@@ -223,6 +241,10 @@ async function startRenderJob(opts: {
       motionStrength,
     };
     if (identityUrl) options.imageUrl = identityUrl;
+    if (isLipSync) {
+      options.videoUrl = performanceUrl;
+      options.audioUrl = audioUrl;
+    }
 
     let lastError = "no provider succeeded";
     let lastConfiguredError = ""; // error from a provider that actually had an API key

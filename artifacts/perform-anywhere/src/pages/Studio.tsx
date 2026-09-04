@@ -13,10 +13,10 @@ import { Loader2, Sparkles, Upload, X, CheckCircle2, Zap, Star, History, Move3d,
 import AppLayout from "@/components/AppLayout";
 import { WORKFLOWS, getWorkflow } from "@/lib/workflows";
 
-type AssetKind = "performance" | "identity" | "outfit" | "scene";
+type AssetKind = "performance" | "identity" | "outfit" | "scene" | "audio";
 type StagedFile = { file: File; preview: string };
 
-const FILE_LIMITS: Record<string, number> = { video: 200, image: 15 };
+const FILE_LIMITS: Record<string, number> = { video: 200, image: 15, audio: 5 };
 
 const STYLE_CHIPS = [
   "Cinematic 35mm", "Anime", "Film noir", "Neon cyberpunk",
@@ -50,7 +50,7 @@ export default function Studio() {
   const [step, setStep]               = useState(1);
   const [title, setTitle]             = useState("Untitled performance");
   const [files, setFiles]             = useState<Record<AssetKind, StagedFile | null>>({
-    performance: null, identity: null, outfit: null, scene: null,
+    performance: null, identity: null, outfit: null, scene: null, audio: null,
   });
   const [selectedModel, setSelectedModel] = useState("kling-v1-6-std");
   const [workflowId, setWorkflowId] = useState("");
@@ -61,6 +61,7 @@ export default function Studio() {
   const [duration, setDuration]           = useState<5 | 10>(5);
   const [aspectRatio, setAspectRatio]     = useState<"16:9" | "9:16" | "1:1">("16:9");
   const [motionStrength, setMotionStrength] = useState(5);
+  const [lipSync, setLipSync]               = useState(false);
   const [configuredProviders, setConfiguredProviders] = useState<Set<string> | null>(null);
   const [enhancing, setEnhancing]         = useState(false);
   const [submitting, setSubmitting]       = useState(false);
@@ -123,7 +124,7 @@ export default function Studio() {
 
       if (hasFiles) {
         const restored: Record<AssetKind, StagedFile | null> = {
-          performance: null, identity: null, outfit: null, scene: null,
+          performance: null, identity: null, outfit: null, scene: null, audio: null,
         };
         for (const { kind, file, preview } of fileRecords) {
           restored[kind as AssetKind] = { file, preview };
@@ -174,7 +175,8 @@ export default function Studio() {
       const f = files[k as AssetKind];
       if (f) URL.revokeObjectURL(f.preview);
     });
-    setFiles({ performance: null, identity: null, outfit: null, scene: null });
+    setFiles({ performance: null, identity: null, outfit: null, scene: null, audio: null });
+    setLipSync(false);
     setDraftRestored(false);
     toast.success("Draft cleared");
   }
@@ -198,6 +200,24 @@ export default function Studio() {
   async function handleSubmit() {
     setSubmitting(true);
     try {
+      if (lipSync && (!files.performance || !files.audio)) {
+        throw new Error("Lip sync requires both a performance video and an audio track.");
+      }
+      if (lipSync) {
+        if (!["video/mp4", "video/quicktime"].includes(files.performance!.file.type)) {
+          throw new Error("Lip-sync video must be an MP4 or MOV file.");
+        }
+        if (files.performance!.file.size > 100 * 1024 * 1024) {
+          throw new Error("Lip-sync video must be 100 MB or smaller.");
+        }
+        if (files.audio!.file.size > 5 * 1024 * 1024) {
+          throw new Error("Lip-sync audio must be 5 MB or smaller.");
+        }
+        const videoDuration = await getMediaDuration(files.performance!.file);
+        const audioDuration = await getMediaDuration(files.audio!.file);
+        if (videoDuration < 2 || videoDuration > 10) throw new Error("Lip-sync video must be between 2 and 10 seconds.");
+        if (audioDuration < 2 || audioDuration > 60) throw new Error("Lip-sync audio must be between 2 and 60 seconds.");
+      }
       const clientId = getClientId();
       const workflow = getWorkflow(workflowId);
       const directedPrompt = customPrompt || enhanced || [scenePrompt, stylePrompt].filter(Boolean).join(". ");
@@ -218,7 +238,7 @@ export default function Studio() {
       }
       if (pErr || !project) throw new Error(pErr?.message ?? "Could not create project");
 
-      for (const kind of ["performance", "identity", "outfit", "scene"] as AssetKind[]) {
+      for (const kind of ["performance", "identity", "outfit", "scene", "audio"] as AssetKind[]) {
         const staged = files[kind];
         if (!staged) continue;
         const ext = staged.file.name.split(".").pop() ?? "bin";
@@ -237,7 +257,7 @@ export default function Studio() {
         clientId,
         projectId: project.id,
         model: selectedModel,
-        options: { duration, aspectRatio, motionStrength, lipSync: false },
+        options: { duration, aspectRatio, motionStrength, lipSync },
       });
       await clearDraft();
       toast.success("Render queued!");
@@ -249,7 +269,7 @@ export default function Studio() {
     }
   }
 
-  const canGoNext   = step === 1 ? true : true;
+  const canGoNext   = !lipSync || (!!files.performance && !!files.audio);
   const activeModel = MODELS.find((m) => m.id === selectedModel) ?? MODELS[0];
   const activeWorkflow = getWorkflow(workflowId);
 
@@ -323,10 +343,11 @@ export default function Studio() {
               />
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <Dropzone kind="performance" label="Performance video" hint="Optional · MP4, MOV, WebM" accept="video/*" file={files.performance} onChange={(f) => setFile("performance", f)} badge="01" />
+              <Dropzone kind="performance" label="Performance video" hint={lipSync ? "Required · MP4 or MOV · 2–10s · max 100MB" : "Optional · MP4, MOV, WebM"} accept={lipSync ? "video/mp4,video/quicktime" : "video/*"} file={files.performance} onChange={(f) => setFile("performance", f)} badge="01" maxMB={lipSync ? 100 : undefined} />
               <Dropzone kind="identity"    label="Identity photo"    hint="Optional · JPG, PNG · used for image-to-video" accept="image/*" file={files.identity} onChange={(f) => setFile("identity", f)} badge="02" />
               <Dropzone kind="outfit"      label="Outfit reference"  hint="Optional · clothing"        accept="image/*" file={files.outfit}      onChange={(f) => setFile("outfit", f)}             badge="03" />
               <Dropzone kind="scene"       label="Scene reference"   hint="Optional · environment"     accept="image/*" file={files.scene}       onChange={(f) => setFile("scene", f)}              badge="04" />
+              <Dropzone kind="audio"       label="Lip-sync audio"    hint="Required for lip sync · MP3, WAV, OGG, M4A, AAC · 2–60s · max 5MB" accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/aac,.m4a" file={files.audio} onChange={(f) => setFile("audio", f)} badge="05" />
             </div>
             <p className="text-xs text-white/30">All assets are optional — you can render with just a prompt, or add a photo for image-to-video.</p>
           </div>
@@ -435,11 +456,15 @@ export default function Studio() {
               <label className="flex cursor-pointer items-center justify-between gap-4">
                 <span>
                   <span className="flex items-center gap-2 text-sm font-semibold text-white"><AudioLines className="h-4 w-4 text-pink-400" /> Lip sync</span>
-                  <span className="mt-1 block text-xs text-white/35">fal.ai is connected. Audio upload support is the remaining requirement.</span>
+                  <span className="mt-1 block text-xs text-white/35">Animate the uploaded performance video to match your audio using Kling LipSync on fal.ai.</span>
                 </span>
-                <input type="checkbox" checked={false} disabled
-                  className="h-5 w-5 cursor-not-allowed accent-pink-500 opacity-40" aria-label="Lip sync unavailable until a provider is connected" />
+                <input type="checkbox" checked={lipSync} onChange={(event) => setLipSync(event.target.checked)}
+                  disabled={configuredProviders !== null && !configuredProviders.has("FAL_KEY")}
+                  className="h-5 w-5 accent-pink-500 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Enable lip sync" />
               </label>
+              {lipSync && (!files.performance || !files.audio) && (
+                <p className="mt-3 text-xs font-medium text-amber-300/80">Add both a performance video and an audio track in Assets before rendering.</p>
+              )}
             </div>
 
             <div>
@@ -572,6 +597,8 @@ export default function Studio() {
               <ReviewRow label="Identity"    value={files.identity?.file.name ?? "—"} />
               <ReviewRow label="Outfit"      value={files.outfit?.file.name ?? "—"} />
               <ReviewRow label="Scene ref"   value={files.scene?.file.name ?? "—"} />
+              <ReviewRow label="Audio"       value={files.audio?.file.name ?? "—"} />
+              <ReviewRow label="Lip sync"    value={lipSync ? "Kling LipSync via fal.ai" : "Off"} highlight={lipSync} />
               {customPrompt
                 ? <ReviewRow label="Prompt"     value={customPrompt} />
                 : <>
@@ -628,16 +655,26 @@ function ReviewRow({ label, value, highlight }: { label: string; value: string; 
   );
 }
 
-function Dropzone({ label, hint, accept, file, onChange, required, badge, kind }: {
+function Dropzone({ label, hint, accept, file, onChange, required, badge, kind, maxMB: maxMBOverride }: {
   label: string; hint: string; accept: string;
   file: StagedFile | null; onChange: (f: File | null) => void;
-  required?: boolean; badge: string; kind: string;
+  required?: boolean; badge: string; kind: string; maxMB?: number;
 }) {
   const [dragging, setDragging] = useState(false);
   const isVideo = accept.startsWith("video");
-  const maxMB   = FILE_LIMITS[isVideo ? "video" : "image"];
+  const isAudio = accept.startsWith("audio");
+  const mediaLabel = isVideo ? "video" : isAudio ? "audio" : "image";
+  const maxMB = maxMBOverride ?? FILE_LIMITS[mediaLabel];
 
   function handleFile(f: File) {
+    const acceptedTypes = accept.split(",").filter((value) => !value.startsWith("."));
+    const acceptedExtensions = accept.split(",").filter((value) => value.startsWith("."));
+    const extensionMatches = acceptedExtensions.some((extension) => f.name.toLowerCase().endsWith(extension));
+    const typeMatches = acceptedTypes.some((type) => type.endsWith("/*") ? f.type.startsWith(type.slice(0, -1)) : f.type === type);
+    if (!typeMatches && !extensionMatches) {
+      toast.error(`Please choose a supported ${mediaLabel} file`);
+      return;
+    }
     const sizeMB = f.size / (1024 * 1024);
     if (sizeMB > maxMB) {
       toast.error(`File too large (${Math.round(sizeMB)} MB — max ${maxMB} MB)`);
@@ -651,12 +688,8 @@ function Dropzone({ label, hint, accept, file, onChange, required, badge, kind }
     setDragging(false);
     const f = e.dataTransfer.files?.[0];
     if (!f) return;
-    if (!f.type.startsWith(accept.replace("/*", ""))) {
-      toast.error(`Please drop a ${isVideo ? "video" : "image"} file`);
-      return;
-    }
     handleFile(f);
-  }, [accept, isVideo]);
+  }, [accept, mediaLabel, maxMB]);
 
   return (
     <div
@@ -699,6 +732,8 @@ function Dropzone({ label, hint, accept, file, onChange, required, badge, kind }
         {file ? (
           isVideo
             ? <video key={file.preview} src={file.preview} className="aspect-video w-full object-cover rounded-xl" autoPlay muted playsInline loop />
+            : isAudio
+              ? <div className="flex aspect-video items-center justify-center rounded-xl bg-black/25 px-4"><audio key={file.preview} src={file.preview} className="w-full" controls preload="metadata" /></div>
             : <img src={file.preview} alt={kind} className="aspect-video w-full object-cover rounded-xl" />
         ) : (
           <div
@@ -719,4 +754,22 @@ function Dropzone({ label, hint, accept, file, onChange, required, badge, kind }
       </label>
     </div>
   );
+}
+
+function getMediaDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const element = document.createElement(file.type.startsWith("audio/") ? "audio" : "video");
+    const url = URL.createObjectURL(file);
+    element.preload = "metadata";
+    element.onloadedmetadata = () => {
+      const duration = element.duration;
+      URL.revokeObjectURL(url);
+      Number.isFinite(duration) ? resolve(duration) : reject(new Error("Could not read media duration."));
+    };
+    element.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error(`Could not read ${file.type.startsWith("audio/") ? "audio" : "video"} metadata.`));
+    };
+    element.src = url;
+  });
 }
