@@ -1,0 +1,190 @@
+I’ll verify the existing table definitions and load the relevant PostgreSQL/Storage guidance. The error is likely caused by an existing table whose schema differs from the `CREATE TABLE` definition, or by a later statement referencing `client_id` before it was successfully added.
+The root cause is visible in the current schema: `public.generations` already exists and **does not have `client_id`**. Therefore `CREATE TABLE IF NOT EXISTS` skips creation, and this script never adds `client_id` to `generations`; the next index statement fails.
+
+There is also an important compatibility issue: the existing `generations` and `credit_ledger` tables use `user_id`/`delta`, not the `client_id`/`amount` design in this snippet. I’ll check all referenced tables precisely before suggesting the safest patch.
+## Root cause
+
+The error occurs at this statement:
+
+```sql
+create index if not exists generations_client_id_idx
+on public.generations (client_id);
+```
+
+Your project already has `public.generations`, so this statement does nothing:
+
+```sql
+create table if not exists public.generations (...);
+```
+
+`IF NOT EXISTS` does **not** update an existing table. The existing table uses `user_id`, not `client_id`.
+
+The current relevant schemas are:
+
+- `public.generations`: has `user_id`, `model`, `prompt`, etc.; no `client_id`
+- `public.credit_ledger`: has `user_id`, `delta`, and `ref_id`; no `client_id`, `amount`, `description`, or `purchase_id`
+- `public.projects`, `project_assets`, `project_renders`, `credit_wallets`, and `purchases`: do not appear to exist
+
+## Why adding only this line is not enough
+
+You could add:
+
+```sql
+alter table public.generations
+add column if not exists client_id text;
+```
+
+but the script would then fail later because it also assumes that `credit_ledger` has columns that do not exist:
+
+```sql
+client_id
+amount
+description
+purchase_id
+```
+
+The existing `credit_ledger` uses a different design:
+
+```text
+user_id uuid
+delta integer
+reason text
+ref_id uuid
+```
+
+Also, the existing `generations` table already has 298 rows and uses `user_id uuid`. Adding a nullable text `client_id` would create two competing ownership systems.
+
+## Recommended fix
+
+Do **not** run the entire snippet unchanged. Adapt the new feature to your existing schema:
+
+1. Keep the existing `public.generations` table.
+2. Use `user_id uuid` instead of `client_id text` for new project-related tables.
+3. Do not replace or redefine `public.credit_ledger`.
+4. Either:
+   - use the existing credit system based on `profiles.credits` and `credit_ledger.delta`, or
+   - create a separate, explicitly named wallet/ledger system with compatible columns.
+
+For example, the new project tables should use this ownership column:
+
+```sql
+user_id uuid not null references auth.users(id)
+```
+
+instead of:
+
+```sql
+client_id text not null
+```
+
+Then change indexes such as:
+
+```sql
+create index if not exists projects_user_id_idx
+on public.projects (user_id);
+```
+
+## Minimal diagnostic correction
+
+If `client_id` is genuinely required for a separate legacy integration, the immediate error can be fixed with:
+
+```sql
+alter table public.generations
+add column if not exists client_id text;
+
+create index if not exists generations_client_id_idx
+on public.generations (client_id);
+```
+
+However, this only fixes the first error. The credit functions will still fail against the existing `credit_ledger`.
+
+## Additional issues in the snippet
+
+### 1. Existing table mismatch
+
+This function will fail because these columns do not exist in the current ledger:
+
+```sql
+insert into public.credit_ledger
+  (client_id, amount, reason, description, purchase_id)
+```
+
+You would need to rewrite it for the existing schema, for example using:
+
+```sql
+insert into public.credit_ledger
+  (user_id, delta, reason, ref_id)
+values
+  (_user_id, _amount, _reason, _purchase_id);
+```
+
+The function parameters should also use `uuid` rather than `text` if they correspond to Supabase users.
+
+### 2. Existing generations mismatch
+
+The new definition expects fields such as:
+
+```sql
+modality
+provider
+options
+credits_used
+output_text
+output_url
+duration_ms
+error_message
+```
+
+The existing table instead has fields such as:
+
+```sql
+mode
+kind
+credits_cost
+result_image_url
+result_video_url
+result_text
+error
+```
+
+These are different schemas, not merely missing columns. You should not merge them blindly.
+
+### 3. Dangerous RLS policy
+
+This policy gives every anonymous and authenticated user unrestricted access to all rows:
+
+```sql
+using (true)
+with check (true)
+```
+
+Likewise, this Storage policy allows anonymous users to upload, read, update, move, and delete objects in both buckets:
+
+```sql
+for all to anon, authenticated
+using (bucket_id in ('uploads','renders'))
+with check (bucket_id in ('uploads','renders'))
+```
+
+That is unsafe for production, especially because the buckets are private but the policy grants broad object access.
+
+### 4. Broad table grants
+
+This also grants anonymous users full table privileges:
+
+```sql
+grant all on all tables in schema public to anon, authenticated;
+```
+
+Prefer narrowly scoped grants and RLS policies tied to `auth.uid()`.
+
+## Best path forward
+
+The cleanest migration is to remove these sections from the snippet:
+
+- the new `generations` table definition
+- the new `credit_ledger` table definition
+- `grant_credits`
+- `spend_credits`
+
+Then create only the new project tables using `user_id uuid`, and integrate them with the existing credit tables and functions already used by your application. This avoids corrupting or conflicting with your current generation and billing data.
