@@ -1,0 +1,137 @@
+Now audit the FilmStudio AI Video Director and make PROJECT MEMORY operational.
+
+I do NOT want Context and Notebook to behave like documentation that the agent merely displays.
+
+They must become part of the agent's reasoning and production pipeline.
+
+For EVERY generation request, implement this sequence:
+
+USER REQUEST
+↓
+TASK UNDERSTANDING
+↓
+MEMORY RETRIEVAL
+↓
+CONTEXT ASSEMBLY
+↓
+CONSTRAINT CHECK
+↓
+SHOT PLAN
+↓
+GENERATION PROMPT
+↓
+MODEL SELECTION
+↓
+GENERATION
+↓
+OUTPUT REVIEW
+↓
+CONTINUITY CHECK
+↓
+ACCEPT / REJECT
+↓
+MEMORY UPDATE
+
+Create an internal "Production Memory Context" object.
+
+Before generating, automatically retrieve:
+
+1. Project Context
+2. Active scene
+3. Active shot
+4. Character identity
+5. Authoritative references
+6. Current wardrobe
+7. Current location
+8. Style
+9. Camera
+10. Locks
+11. Acceptance criteria
+12. Previous approved shot(s)
+13. Relevant failed/rejected outputs
+14. Relevant Notebook knowledge
+
+Then construct the model prompt from those facts.
+
+IMPORTANT:
+
+The AI must NOT simply dump the entire Notebook into the prompt.
+
+Use relevance filtering.
+
+For example:
+
+A tattoo reference is relevant to a close-up of Josh's arm.
+
+It may not be relevant to a wide establishing shot.
+
+A wardrobe reference is relevant to a performance shot.
+
+A lip-sync shot requires:
+- face
+- mouth
+- identity
+- wardrobe
+- current scene
+- audio timing
+
+A location establishing shot may require:
+- location
+- weather
+- lighting
+- camera
+- style
+
+Create task-specific memory retrieval.
+
+Implement memory profiles such as:
+
+FACE_GENERATION
+CHARACTER_GENERATION
+WARDROBE_GENERATION
+LOCATION_GENERATION
+PERFORMANCE_GENERATION
+LIP_SYNC_GENERATION
+VIDEO_SHOT_GENERATION
+STORYBOARD_GENERATION
+FINAL_ASSEMBLY
+
+Each profile retrieves the appropriate memory.
+
+Also implement a visible "Using project memory" section in the agent UI.
+
+For example:
+
+Using:
+✓ Josh Identity Lock
+✓ Josh Face Reference
+✓ Red-Tipped Dreadlock Reference
+✓ Current Wardrobe
+✓ Wet Night Street
+✓ Locked Camera
+✓ Shot 04 Continuity
+✓ Acceptance Criteria
+
+This lets the user understand WHY the agent generated something.
+
+If the agent detects a conflict:
+
+Example:
+User requests sunglasses.
+
+Current lock:
+"No sunglasses for lip-sync."
+
+Do not silently comply.
+
+Respond:
+
+"Your request conflicts with the active Lip-Sync Wardrobe Lock: sunglasses are OFF. Change the lock or keep the current continuity?"
+
+Allow:
+[Change Lock]
+[Keep Lock]
+
+Make this production-grade.
+
+The goal is for FilmStudio AI to behave like an actual AI Video Director with persistent creative memory rather than a chatbot attached to a collection of generation APIs.

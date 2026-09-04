@@ -1,0 +1,761 @@
+I want you to add a first-class PROJECT MEMORY SYSTEM to FilmStudio AI inspired by the way InVideo AI Agents use Context and Notebook.
+
+Do NOT make this a simple notes page.
+
+The purpose is to give the AI Video Director persistent production memory so it can understand a project, maintain continuity, respect locked decisions, and use approved references when planning and generating images/videos.
+
+BUILD TWO CONNECTED SYSTEMS:
+
+==================================================
+1. PROJECT CONTEXT
+==================================================
+
+Add a "Context" area to every FilmStudio project.
+
+Context represents the ACTIVE PRODUCTION TRUTH for the current project.
+
+Create structured sections:
+
+A. ABOUT THIS PROJECT
+- Project title
+- One-line description
+- Full description
+- Creative objective
+- Audience
+- Desired emotional effect
+- Genre
+- Format
+- Aspect ratio
+- Duration
+- Resolution
+- Platform
+- Overall visual direction
+
+B. SPINE
+The project's primary source material.
+
+Support:
+- Audio/music track
+- Lyrics/transcript
+- Script
+- Story
+- Reference document
+- Timing information
+- Beat markers
+- Section markers
+
+The agent must treat the selected spine as authoritative.
+
+For music videos:
+- Never invent a replacement song.
+- Preserve the uploaded track.
+- Understand duration.
+- Understand vocal timing where available.
+- Allow sections such as intro, verse, hook, bridge, outro.
+- Allow exact timestamps.
+
+C. PICTURE / STORY
+Store:
+- Story concept
+- Narrative
+- Scene description
+- Section plans
+- Shot plans
+- Performance direction
+- Camera direction
+- Blocking
+- Environment
+- Lighting
+- Action
+- Continuity requirements
+
+D. CHARACTER
+Store:
+- Character name
+- Identity description
+- Face identity
+- Body identity
+- Hair
+- Skin
+- Eyes
+- Facial hair
+- Tattoos
+- Jewelry
+- Clothing
+- Shoes
+- Accessories
+- Age range
+- Build
+- Physical proportions
+- Personality
+- Performance behavior
+
+E. WORLD / LOCATION
+Store:
+- Location
+- Time of day
+- Weather
+- Architecture
+- Environment
+- Lighting
+- Color language
+- Props
+- Background characters
+- Vehicles
+- Police/security/etc.
+- Environmental continuity
+
+F. WARDROBE
+Allow multiple wardrobe definitions.
+
+Each wardrobe should have:
+- Name
+- Description
+- Top
+- Bottom
+- Shoes
+- Jewelry
+- Accessories
+- Hair state
+- Makeup
+- Wet/dry state
+- Approved reference images
+- Forbidden substitutions
+
+G. CAMERA
+Store:
+- Camera style
+- Lens
+- Shot sizes
+- Framing
+- Camera movement
+- Camera height
+- Camera angle
+- Depth of field
+- Focus behavior
+- Composition rules
+- Aspect ratio
+
+H. STYLE
+Store:
+- Cinematic style
+- Lighting
+- Color grade
+- Contrast
+- Texture
+- Film characteristics
+- Realism level
+- Visual references
+- Negative style rules
+
+I. LAYERS
+Allow the project to define compositing layers.
+
+Example:
+Layer A = main artist performance
+Layer B = background characters
+Layer C = environmental effects
+Layer D = VFX
+Layer E = typography
+
+Each layer should contain:
+- Purpose
+- Source assets
+- Position
+- Timing
+- Generation instructions
+- Continuity rules
+
+J. LOCKS
+This is extremely important.
+
+Allow the user or agent to explicitly LOCK decisions.
+
+Examples:
+
+IDENTITY LOCK:
+"Josh's identity must always come from the approved identity references."
+
+FACE LOCK:
+"Use the approved face reference. Do not substitute a generated face."
+
+WARDROBE LOCK:
+"Red/black long-sleeve jersey, black pants and white sneakers."
+
+LOCATION LOCK:
+"Wet urban street at night."
+
+CAMERA LOCK:
+"Locked-off camera."
+
+STYLE LOCK:
+"Photorealistic cinematic night photography."
+
+A lock must be treated as a hard constraint by the generation/planning system.
+
+Every generation request should automatically retrieve relevant locks before creating prompts.
+
+K. ACCEPTANCE CRITERIA
+Allow explicit project-level success conditions.
+
+Examples:
+- Face identity must match approved reference.
+- Hair must remain red-tipped.
+- No sunglasses.
+- Jersey must remain unchanged.
+- Officers must remain in background.
+- Camera must remain locked.
+- No additional faces.
+- Lip sync must match audio.
+- Character must remain bottom-right.
+- Final shot must end before the vocal cut.
+
+The agent should use these criteria during output review.
+
+==================================================
+2. PROJECT NOTEBOOK
+==================================================
+
+Add a persistent "Notebook" system.
+
+Notebook is different from Context.
+
+Context = current active production truth.
+
+Notebook = long-term project knowledge.
+
+Notebook entries should support:
+
+- Character
+- Character identity
+- Face
+- Body
+- Hair
+- Tattoos
+- Jewelry
+- Wardrobe
+- Location
+- World
+- Prop
+- Vehicle
+- Style
+- Camera
+- Lighting
+- Prompt recipe
+- Production playbook
+- Story
+- Scene
+- Shot
+- Reference
+- Continuity rule
+- Lesson learned
+- Approved generation
+- Rejected generation
+- General note
+
+Each Notebook entry should support:
+
+- title
+- type
+- description
+- structured metadata
+- text content
+- reference images/assets
+- tags
+- status
+- created date
+- updated date
+- source
+- confidence
+- approval state
+
+Statuses:
+
+DRAFT
+PROPOSED
+APPROVED
+LOCKED
+REJECTED
+ARCHIVED
+
+==================================================
+3. REFERENCE IMAGE MANAGEMENT
+==================================================
+
+Notebook and Context must support reference images.
+
+A reference should be able to be marked:
+
+AUTHORITATIVE
+SUPPORTING
+EXPLORATORY
+REJECTED
+
+AUTHORITATIVE references have highest priority.
+
+For character identity specifically, support:
+
+- Front face
+- Back
+- Left profile
+- Right profile
+- 3/4 view
+- Full body
+- Upper body
+- Close-up
+- Hair
+- Tattoos
+- Jewelry
+- Wardrobe
+
+The system must know what each image is actually a reference for.
+
+Example:
+
+reference:
+2.2 selfie
+purpose:
+FACE IDENTITY
+
+reference:
+2.1 character sheet
+purpose:
+BODY + FRONT/BACK/SIDE + TATTOOS
+
+reference:
+2.3 concept still
+purpose:
+WARDROBE + LOCATION + WORLD
+
+Do not treat every image as an identity reference.
+
+==================================================
+4. AI MEMORY RETRIEVAL
+==================================================
+
+This is the most important part.
+
+Whenever the AI Video Director performs a task, automatically retrieve relevant Context + Notebook information.
+
+Example:
+
+User:
+"Create the next shot of Josh walking through the street."
+
+The agent should automatically retrieve:
+
+- Character identity lock
+- Approved face references
+- Hair reference
+- Body reference
+- Tattoo reference
+- Current wardrobe
+- Current location
+- Current lighting
+- Current camera rules
+- Current story/section
+- Current continuity rules
+- Previous approved shot
+- Relevant rejected outputs
+
+Then construct the generation prompt from that information.
+
+The user should NOT have to manually paste the same information every time.
+
+==================================================
+5. MEMORY PRIORITY SYSTEM
+==================================================
+
+Implement priority ordering:
+
+1. HARD LOCKS
+2. APPROVED AUTHORITATIVE REFERENCES
+3. ACCEPTANCE CRITERIA
+4. ACTIVE CONTEXT
+5. APPROVED NOTEBOOK ENTRIES
+6. PREVIOUS APPROVED GENERATIONS
+7. GENERAL PROJECT NOTES
+8. USER'S NEW CREATIVE INSTRUCTION
+9. MODEL DEFAULTS
+
+However, a new explicit user instruction should be able to intentionally override a previous non-locked decision.
+
+Never silently override a HARD LOCK.
+
+If a user request conflicts with a lock, tell the user:
+
+"That conflicts with the current [LOCK]. Do you want to change the lock?"
+
+==================================================
+6. AGENT BEHAVIOR
+==================================================
+
+The AI Video Director should treat Context and Notebook as production memory.
+
+Before generating anything:
+
+1. Understand user request.
+2. Identify required memory.
+3. Retrieve relevant Context.
+4. Retrieve relevant Notebook entries.
+5. Retrieve authoritative references.
+6. Retrieve locks.
+7. Retrieve acceptance criteria.
+8. Build a production plan.
+9. Generate prompt(s).
+10. Generate asset(s).
+11. Review result against acceptance criteria.
+12. If failed, explain which criteria failed.
+13. Automatically propose a regeneration.
+14. Never overwrite approved assets without explicit permission.
+
+==================================================
+7. AUTOMATIC NOTEBOOK LEARNING
+==================================================
+
+Allow the agent to suggest Notebook entries based on production activity.
+
+Example:
+
+User says:
+"Never use sunglasses for Josh's lip-sync shots."
+
+Agent:
+"Add this as a continuity rule?"
+
+If approved, save:
+
+Type:
+Continuity Rule
+
+Rule:
+"Sunglasses OFF for Josh lip-sync shots."
+
+Status:
+APPROVED
+
+Similarly, if the user approves a generated character sheet:
+
+Automatically offer:
+
+"Save this as the authoritative character identity reference?"
+
+==================================================
+8. APPROVAL SYSTEM
+==================================================
+
+Everything important should have an approval state.
+
+The agent must distinguish:
+
+GENERATED
+REVIEWING
+APPROVED
+LOCKED
+REJECTED
+
+Only APPROVED/LOCKED assets should become strong continuity references.
+
+Rejected outputs should remain available as negative evidence.
+
+Example:
+
+Rejected:
+"Face drifted toward generated face."
+
+Store that as a continuity failure associated with the generation.
+
+==================================================
+9. CONTEXT EDITOR
+==================================================
+
+Create a clean editor where users can:
+
+- Add section
+- Edit section
+- Delete section
+- Reorder section
+- Lock section
+- Unlock section
+- Attach references
+- Approve information
+- Reject information
+- Add notes
+- Convert note into a lock
+- Convert notebook entry into active context
+
+The interface should feel like a professional production workspace, not a generic CRUD dashboard.
+
+==================================================
+10. NOTEBOOK EDITOR
+==================================================
+
+Create:
+
+Notebook
+├── Search
+├── Filters
+├── Characters
+├── Wardrobes
+├── Locations
+├── Styles
+├── Camera
+├── References
+├── Playbooks
+├── Continuity
+├── Approved
+├── Rejected
+└── Archive
+
+Entries should open into a rich editor.
+
+Support references between entries.
+
+Example:
+
+Josh
+→ Identity Sheet
+→ Face Reference
+→ Tattoo Map
+→ Jewelry
+→ Current Wardrobe
+→ Current Video
+→ Approved Shots
+
+==================================================
+11. SEARCH
+==================================================
+
+Implement semantic-style retrieval architecture.
+
+The agent should be able to search:
+
+"What is Josh wearing in this video?"
+
+and retrieve the active wardrobe.
+
+"What is Josh's authoritative face?"
+
+and retrieve the face identity references.
+
+"What failed in the previous generation?"
+
+and retrieve rejected generations and failure notes.
+
+"What's locked for this shot?"
+
+and retrieve the relevant locks.
+
+==================================================
+12. DATA MODEL
+==================================================
+
+Design this so it is not tied to one UI.
+
+Create reusable entities for:
+
+Project
+ContextSection
+NotebookEntry
+ReferenceAsset
+Character
+Wardrobe
+Location
+StyleProfile
+CameraProfile
+Lock
+AcceptanceCriterion
+Shot
+Scene
+Generation
+GenerationReview
+ContinuityEvent
+
+Use relational IDs/references between them.
+
+Do not duplicate the same information unnecessarily.
+
+==================================================
+13. GENERATION CONTEXT BUILDER
+==================================================
+
+Create an internal service/function:
+
+buildGenerationContext(projectId, task)
+
+It should return a structured package containing:
+
+PROJECT
+SPINE
+CHARACTER
+IDENTITY
+WARDROBE
+LOCATION
+STYLE
+CAMERA
+STORY
+SHOT
+LOCKS
+ACCEPTANCE_CRITERIA
+AUTHORITATIVE_REFERENCES
+PREVIOUS_APPROVED_ASSETS
+RELEVANT_FAILURES
+
+The model-generation services should consume this context.
+
+This becomes the foundation for image generation, video generation, lip sync, storyboarding, shot generation, and final assembly.
+
+==================================================
+14. DO NOT JUST BUILD THE UI
+==================================================
+
+The Context and Notebook data MUST actually connect to the AI Video Director.
+
+The following must be true:
+
+Creating a lock changes generation behavior.
+
+Approving a reference changes retrieval priority.
+
+Changing wardrobe changes future shot prompts.
+
+Rejecting a face prevents it from becoming an identity reference.
+
+Approving a character sheet makes it available to future generations.
+
+Changing project location updates future scene generation.
+
+Acceptance criteria are used during output review.
+
+Notebook knowledge can become active Context.
+
+Context can be saved back into Notebook.
+
+==================================================
+15. SEED THE SYSTEM WITH A REAL EXAMPLE
+==================================================
+
+Create initial example data based on this production concept:
+
+PROJECT:
+NBA Josh — The One Hook
+
+FORMAT:
+25-second 16:9 cinematic music video.
+
+CONCEPT:
+Josh performs the hook calmly on a wet urban street at night while police officers loop behind him and never catch him. Josh eventually glances back, smirks, turns and walks out of frame.
+
+CHARACTER:
+NBA Josh.
+
+WARDROBE:
+Red and black long-sleeve jersey,
+black pants,
+white sneakers,
+layered diamond chains,
+no sunglasses.
+
+LOCATION:
+Wet urban night street.
+Rain.
+Overhead street lighting.
+Red/blue police lighting.
+
+COMPOSITION:
+Josh bottom-right,
+waist-up.
+Officers upper-left.
+Empty center.
+
+CAMERA:
+Locked-off.
+
+PERFORMANCE:
+Calm, fearless, subtle hands.
+Energy concentrated around mouth and shoulders.
+
+ENDING:
+Josh glances over his left shoulder,
+smirks,
+turns,
+walks out of frame.
+Officers continue running.
+
+ACCEPTANCE:
+- Face identity holds.
+- Red-tipped dreadlocks remain consistent.
+- NBA JOSH tattoo remains consistent.
+- Jewelry remains consistent.
+- No sunglasses.
+- Officers remain behind Josh.
+- Officers loop rather than catching him.
+- Camera remains locked.
+- No unnecessary additional faces.
+- Lip-sync matches the supplied track.
+- Final walk-out occurs near the end of the track.
+
+Create these as real Context/Notebook records, not hardcoded text in the frontend.
+
+==================================================
+16. ARCHITECTURE REQUIREMENT
+==================================================
+
+Use clean separation:
+
+UI
+↓
+Project Memory API
+↓
+Context/Notebook Service
+↓
+Retrieval Layer
+↓
+Generation Context Builder
+↓
+AI Video Director
+↓
+Image/Video/Audio Generation Providers
+
+The generation providers must NOT independently invent project identity/context.
+
+They receive their production context from the central memory system.
+
+==================================================
+17. IMPLEMENTATION REQUIREMENT
+==================================================
+
+First inspect the existing FilmStudio AI codebase.
+
+Do not rebuild existing functionality unnecessarily.
+
+Identify:
+- existing project model
+- existing agent architecture
+- existing generation pipeline
+- existing asset/reference system
+- existing database
+- existing chat system
+- existing shot/storyboard system
+
+Integrate Context + Notebook into the existing architecture.
+
+Preserve existing functionality.
+
+Then implement the feature end-to-end.
+
+After implementation:
+- run type checking
+- run tests
+- verify database migrations
+- verify API routes
+- verify retrieval
+- verify Context → generation
+- verify Notebook → generation
+- verify locks
+- verify approvals
+- verify reference priority
+- verify rejection handling
+- verify persistence after reload
+
+Do not stop at a mock UI.

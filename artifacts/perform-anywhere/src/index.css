@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
@@ -5,91 +6,105 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, monospace;
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-pink: var(--pink);
+  --color-aurora-pink: var(--aurora-pink);
+  --color-aurora-purple: var(--aurora-purple);
+  --color-aurora-cyan: var(--aurora-cyan);
 }
 
-:root {
-  --radius: 0.75rem;
+:root, .dark {
+  --background: 285 40% 4%;
+  --foreground: 285 10% 95%;
+  --card: 285 30% 7%;
+  --card-foreground: 285 10% 95%;
+  --popover: 285 30% 7%;
+  --popover-foreground: 285 10% 95%;
+  --primary: 315 100% 60%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 275 80% 60%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 285 20% 12%;
+  --muted-foreground: 285 15% 60%;
+  --accent: 295 40% 12%;
+  --accent-foreground: 285 10% 95%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 285 20% 15%;
+  --input: 285 20% 12%;
+  --ring: 315 100% 60%;
 
-  /* Aurora deep purple-navy */
-  --background: oklch(0.10 0.04 290);
-  --foreground: oklch(0.97 0.01 290);
+  --aurora-pink: 315 100% 60%;
+  --aurora-purple: 275 80% 60%;
+  --aurora-cyan: 190 100% 60%;
 
-  --card: oklch(0.14 0.05 285);
-  --card-foreground: oklch(0.97 0.01 290);
-  --popover: oklch(0.14 0.05 285);
-  --popover-foreground: oklch(0.97 0.01 290);
-
-  /* Purple primary */
-  --primary: oklch(0.58 0.26 290);
-  --primary-foreground: oklch(0.98 0.01 290);
-
-  --secondary: oklch(0.18 0.06 285);
-  --secondary-foreground: oklch(0.97 0.01 290);
-
-  --muted: oklch(0.18 0.05 285);
-  --muted-foreground: oklch(0.60 0.05 280);
-
-  --accent: oklch(0.20 0.07 285);
-  --accent-foreground: oklch(0.97 0.01 290);
-
-  --destructive: oklch(0.55 0.22 27);
-  --destructive-foreground: oklch(0.98 0.01 80);
-
-  --border: oklch(0.28 0.07 285 / 0.5);
-  --input: oklch(0.18 0.06 285);
-  --ring: oklch(0.58 0.26 290 / 0.6);
-
-  /* Hot pink accent for badges */
-  --pink: oklch(0.65 0.30 330);
-}
-
-.dark {
-  --background: oklch(0.10 0.04 290);
-  --foreground: oklch(0.97 0.01 290);
+  --radius: 1rem;
 }
 
 @layer base {
-  * { border-color: var(--color-border); }
-  html { color-scheme: dark; }
+  * { border-color: hsl(var(--border)); }
+  html { 
+    color-scheme: dark; 
+    scroll-behavior: smooth; 
+  }
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
+}
 
-  /* Aurora grid background */
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(to right, hsl(var(--aurora-pink)), hsl(var(--aurora-purple)), hsl(var(--aurora-cyan)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+  }
+  
+  .bg-glass {
+    background: rgba(10, 5, 16, 0.7);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+  }
+
   .aurora-grid {
+    background-size: 60px 60px;
     background-image:
-      linear-gradient(to right, oklch(0.97 0.01 290 / 0.04) 1px, transparent 1px),
-      linear-gradient(to bottom, oklch(0.97 0.01 290 / 0.04) 1px, transparent 1px);
-    background-size: 48px 48px;
+      linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  }
+}
+
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(500%); }
+}
+
+@keyframes scan-face {
+  0% { transform: translateY(0%); }
+  50% { transform: translateY(8000%); }
+  100% { transform: translateY(0%); }
+}
+
+@keyframes dash {
+  to { stroke-dashoffset: -8; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-15px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
