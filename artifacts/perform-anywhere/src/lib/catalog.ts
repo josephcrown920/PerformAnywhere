@@ -98,6 +98,7 @@ export const CATALOG: Record<Modality, ProviderModel[]> = {
     { id: "huggingface/black-forest-labs/FLUX.1-schnell", provider: "huggingface", model: "black-forest-labs/FLUX.1-schnell", label: "FLUX.1 schnell (HF)" },
     { id: "huggingface/stabilityai/stable-diffusion-xl-base-1.0", provider: "huggingface", model: "stabilityai/stable-diffusion-xl-base-1.0", label: "SDXL (HF)" },
     { id: "fal/fal-ai/flux/dev",                   provider: "fal",     model: "fal-ai/flux/dev",                label: "FLUX dev (Fal)" },
+    { id: "fal/fal-ai/bytedance/seedream/v4/text-to-image", provider: "fal", model: "fal-ai/bytedance/seedream/v4/text-to-image", label: "Seedream 4 (Fal)" },
     { id: "replicate/black-forest-labs/flux-schnell", provider: "replicate", model: "black-forest-labs/flux-schnell", label: "FLUX schnell (Replicate)" },
   ],
   video: [
@@ -139,6 +140,10 @@ export const CATALOG: Record<Modality, ProviderModel[]> = {
     { id: "kling/kling-v1-6-pro",                           provider: "kling", model: "kling-v1-6-pro",                            label: "Kling 1.6 Pro (direct)" },
     { id: "fal/fal-ai/kling-video/v1.6/pro/text-to-video",  provider: "fal", model: "fal-ai/kling-video/v1.6/pro/text-to-video",   label: "Kling 1.6 Pro T2V (Fal)" },
     { id: "fal/fal-ai/kling-video/v1.6/pro/image-to-video", provider: "fal", model: "fal-ai/kling-video/v1.6/pro/image-to-video",  label: "Kling 1.6 Pro I2V (Fal)" },
+    { id: "fal/fal-ai/wan-t2v",                            provider: "fal", model: "fal-ai/wan-t2v",                             label: "Wan 2.1 T2V (Fal)" },
+    { id: "fal/bytedance/seedance-2.0/text-to-video",       provider: "fal", model: "bytedance/seedance-2.0/text-to-video",      label: "Seedance 2 T2V (Fal)" },
+    { id: "fal/fal-ai/bytedance/omnihuman",                 provider: "fal", model: "fal-ai/bytedance/omnihuman",                label: "OmniHuman (Fal)" },
+    { id: "fal/fal-ai/kling-video/lipsync/audio-to-video",  provider: "fal", model: "fal-ai/kling-video/lipsync/audio-to-video", label: "Kling LipSync (Fal)" },
     { id: "replicate/minimax/video-01",                     provider: "replicate", model: "minimax/video-01",                      label: "MiniMax (Replicate)" },
   ],
   audio: [

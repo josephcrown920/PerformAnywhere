@@ -1,3 +1,5 @@
+import { ReplitConnectors } from "@replit/connectors-sdk";
+
 export class ProviderUnconfigured extends Error {
   constructor(provider: string) {
     super(`provider_unconfigured:${provider}`);
@@ -261,25 +263,49 @@ export const imageAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
 
 // ──────────────── VIDEO ────────────────
 
-async function falQueueWait(model: string, payload: Record<string, unknown>, key: string): Promise<Record<string, unknown>> {
-  const submit = await fetch(`https://queue.fal.run/${model}`, {
+function hasFalAuth(): boolean {
+  return Boolean(env("FAL_KEY") || env("REPLIT_CONNECTORS_HOSTNAME"));
+}
+
+async function falFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const key = env("FAL_KEY");
+  if (key) {
+    return fetch(`https://queue.fal.run${path}`, {
+      ...init,
+      headers: { ...init.headers, Authorization: `Key ${key}` },
+    });
+  }
+  if (!env("REPLIT_CONNECTORS_HOSTNAME")) throw new ProviderUnconfigured("fal");
+  const connectors = new ReplitConnectors();
+  const headers = Object.fromEntries(new Headers(init.headers).entries());
+  return connectors.proxy("falai", path, {
+    method: init.method,
+    headers,
+    body: init.body,
+  });
+}
+
+async function falQueueWait(model: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const submit = await falFetch(`/${model}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Key ${key}` },
+    headers: { "Content-Type": "application/json", "X-Fal-Request-Timeout": "900" },
     body: JSON.stringify(payload),
   });
   if (!submit.ok) throw new Error(`fal submit ${submit.status}: ${await submit.text()}`);
   const { request_id } = await submit.json() as { request_id: string };
-  const statusUrl = `https://queue.fal.run/${model}/requests/${request_id}/status`;
-  const resultUrl = `https://queue.fal.run/${model}/requests/${request_id}`;
+  const appId = model.split("/").slice(0, 2).join("/");
+  const statusPath = `/${appId}/requests/${request_id}/status`;
+  const resultPath = `/${appId}/requests/${request_id}`;
   for (let i = 0; i < 120; i++) {
     await new Promise((r) => setTimeout(r, 5000));
-    const s = await fetch(statusUrl, { headers: { Authorization: `Key ${key}` } });
-    const sj = await s.json() as { status: string };
+    const s = await falFetch(statusPath);
+    const sj = await s.json() as { status: string; error?: string };
     if (sj.status === "COMPLETED") {
-      const r = await fetch(resultUrl, { headers: { Authorization: `Key ${key}` } });
+      if (sj.error) throw new Error(`fal failed: ${sj.error}`);
+      const r = await falFetch(resultPath);
+      if (!r.ok) throw new Error(`fal result ${r.status}: ${await r.text()}`);
       return r.json() as Promise<Record<string, unknown>>;
     }
-    if (sj.status === "FAILED") throw new Error(`fal failed: ${JSON.stringify(sj)}`);
   }
   throw new Error("fal timeout after 10 minutes");
 }
@@ -415,8 +441,15 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
   },
 
   fal: async ({ model, prompt, options = {} }) => {
-    const key = env("FAL_KEY");
-    if (!key) throw new ProviderUnconfigured("fal");
+    if (!hasFalAuth()) throw new ProviderUnconfigured("fal");
+    const resolvedModel =
+      model === "fal-wan"
+        ? (options.imageUrl ? "fal-ai/wan/v2.7/image-to-video" : "fal-ai/wan-t2v")
+        : model === "fal-seedance"
+          ? (options.imageUrl ? "bytedance/seedance-2.0/image-to-video" : "bytedance/seedance-2.0/text-to-video")
+          : model === "fal-kling"
+            ? (options.imageUrl ? "fal-ai/kling-video/v1.6/pro/image-to-video" : "fal-ai/kling-video/v1.6/pro/text-to-video")
+            : model;
     const payload: Record<string, unknown> = {
       prompt,
       duration: options.duration ?? 5,
@@ -425,12 +458,12 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
     if (options.imageUrl) payload.image_url = options.imageUrl;
     if (options.videoUrl) payload.video_url = options.videoUrl;
     if (options.negativePrompt) payload.negative_prompt = options.negativePrompt;
-    const j = await falQueueWait(model, payload, key);
+    const j = await falQueueWait(resolvedModel, payload);
     const url = (j.video as { url?: string })?.url
       ?? (j.output as { url?: string })?.url
       ?? (Array.isArray(j.output) ? (j.output as string[])[0] : undefined);
     if (!url) throw new Error(`fal video: no url in response: ${JSON.stringify(j).slice(0, 300)}`);
-    return { provider: "fal", model, output_url: url, raw: j };
+    return { provider: "fal", model: resolvedModel, output_url: url, raw: j };
   },
 
   replicate: async ({ model, prompt, options = {} }) => {
@@ -547,12 +580,11 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
 
   // Hailuo (MiniMax) via fal.ai
   hailuo: async ({ prompt, options = {} }) => {
-    const key = env("FAL_KEY");
-    if (!key) throw new ProviderUnconfigured("hailuo");
+    if (!hasFalAuth()) throw new ProviderUnconfigured("hailuo");
     const model = "fal-ai/minimax/video-01";
     const payload: Record<string, unknown> = { prompt };
     if (options.imageUrl) payload.first_frame_image = options.imageUrl;
-    const j = await falQueueWait(model, payload, key);
+    const j = await falQueueWait(model, payload);
     const url = (j.video as { url?: string })?.url;
     if (!url) throw new Error(`hailuo: no url in response: ${JSON.stringify(j).slice(0, 300)}`);
     return { provider: "hailuo", model, output_url: url, raw: j };
@@ -598,8 +630,7 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
 
   // Runway Gen-4 via fal.ai
   runway: async ({ prompt, options = {} }) => {
-    const key = env("FAL_KEY");
-    if (!key) throw new ProviderUnconfigured("runway");
+    if (!hasFalAuth()) throw new ProviderUnconfigured("runway");
     const model = "fal-ai/runway-gen4/turbo/image-to-video";
     if (!options.imageUrl) throw new Error("runway: imageUrl (still frame) required");
     const payload: Record<string, unknown> = {
@@ -608,7 +639,7 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
       duration: options.duration ?? 5,
       ratio: options.aspectRatio ?? "16:9",
     };
-    const j = await falQueueWait(model, payload, key);
+    const j = await falQueueWait(model, payload);
     const url = (j.video as { url?: string })?.url;
     if (!url) throw new Error(`runway: no url in response: ${JSON.stringify(j).slice(0, 300)}`);
     return { provider: "runway", model, output_url: url, raw: j };

@@ -25,7 +25,7 @@ An AI video generation studio. Users upload a performance video and identity pho
 - Frontend: React 19 + Vite 7, Tailwind CSS v4, Wouter (routing), React Query
 - API: Express 5
 - DB + Storage: Supabase (PostgreSQL + Storage buckets)
-- AI providers: Kling (primary), Hailuo, fal.ai (fallbacks)
+- AI providers: BytePlus ModelArk (text/orchestration), fal.ai (primary managed media inference), Vast.ai (GPU workloads), and direct Kling where configured
 
 ## Where things live
 

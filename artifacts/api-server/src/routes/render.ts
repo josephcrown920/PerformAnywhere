@@ -12,6 +12,7 @@ type Asset = { kind: string; storage_path: string };
 
 function modelToProviderName(model: string): string {
   if (model.startsWith("kling")) return "kling";
+  if (model.startsWith("fal-")) return "fal";
   if (model.startsWith("seedance")) return "seedance";
   if (model === "hailuo") return "hailuo";
   if (model === "fal") return "fal";
@@ -72,6 +73,9 @@ router.post("/start", async (req, res) => {
     "fal",
     "wan",
     "veo",
+    "fal-wan",
+    "fal-seedance",
+    "fal-kling",
   ];
   const model = requestedModel && ALLOWED_MODELS.includes(requestedModel) ? requestedModel : "seedance-lite";
   const duration = rawOptions?.duration === 10 ? 10 : 5;
@@ -83,7 +87,7 @@ router.post("/start", async (req, res) => {
   if (lipSync) {
     return res.status(400).json({
       error: "lip_sync_provider_not_configured",
-      message: "Lip sync needs a connected provider and an audio input. Connect Replicate to enable it.",
+      message: "Lip sync needs a source video and an audio input. fal.ai is connected; add both assets to enable it.",
     });
   }
 
@@ -203,11 +207,13 @@ async function startRenderJob(opts: {
     const primaryProvider = preferredProvider ?? modelToProviderName(chosenModel);
     const providerOrder = [
       primaryProvider,
-      ...["seedance", "runpod", "kling", "wan", "veo", "sora", "huggingface"].filter((p) => p !== primaryProvider),
+      ...["fal", "kling", "seedance", "runpod", "wan", "veo", "sora", "huggingface"].filter((p) => p !== primaryProvider),
     ];
 
     const modelForProvider = (p: string) => {
       if (p === "kling") return chosenModel.startsWith("kling") ? chosenModel : "kling-v1-6-std";
+      if (p === "fal" && chosenModel.startsWith("fal-")) return chosenModel;
+      if (p === "fal") return "fal-ai/kling-video/v1.6/pro/text-to-video";
       return p;
     };
 
@@ -517,7 +523,8 @@ router.get("/providers", (_req, res) => {
   const PROVIDERS = [
     { id: "MODEL_ARK_API_KEY",   label: "BytePlus ModelArk (text)", configKey: "MODEL_ARK_API_KEY", mode: "direct" },
     { id: "KLING_ACCESS_KEY",      label: "Kling AI",            configKey: "KLING_ACCESS_KEY" },
-    { id: "FAL_KEY",               label: "Fal.ai (Hailuo/Runway)", configKey: "FAL_KEY" },
+    { id: "FAL_KEY",               label: "fal.ai Models", configKey: "FAL_KEY", mode: "connector" },
+    { id: "VAST_API_KEY",          label: "Vast.ai GPU", configKey: "VAST_API_KEY" },
     { id: "REPLICATE_API_TOKEN",   label: "Replicate",           configKey: "REPLICATE_API_TOKEN" },
     { id: "LOVABLE_API_KEY",       label: "Lovable AI Gateway",  configKey: "LOVABLE_API_KEY" },
     { id: "GROQ_API_KEY",          label: "Groq (text)",         configKey: "GROQ_API_KEY" },
@@ -531,7 +538,11 @@ router.get("/providers", (_req, res) => {
   return res.json(PROVIDERS.map((p) => ({
     id: p.id,
     label: p.label,
-    configured: p.mode === "workflow" ? true : !!process.env[p.configKey],
+    configured: p.mode === "workflow"
+      ? true
+      : p.mode === "connector"
+        ? !!(process.env[p.configKey] || process.env.REPLIT_CONNECTORS_HOSTNAME)
+        : !!process.env[p.configKey],
     mode: p.mode ?? "direct",
   })));
 });

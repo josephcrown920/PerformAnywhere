@@ -24,19 +24,19 @@ const STYLE_CHIPS = [
 ];
 
 const MODELS = [
-  { id: "seedance-lite",   providerKey: "REPLICATE_API_TOKEN", label: "Seedance Lite",     badge: "Budget",  note: "~1–2 min · lowest cost" },
+  { id: "fal-seedance",    providerKey: "FAL_KEY", label: "Seedance 2",        badge: "Motion",  note: "fal.ai · director controls" },
   { id: "kling-v1-6-std",  providerKey: "KLING_ACCESS_KEY", label: "Kling v1.6",       badge: "Fast",    note: "~2–3 min · standard quality" },
   { id: "kling-v1-6-pro",  providerKey: "KLING_ACCESS_KEY", label: "Kling v1.6 Pro",    badge: "Quality", note: "~4–6 min · best quality" },
+  { id: "fal-kling",       providerKey: "FAL_KEY", label: "Kling Pro (fal)",    badge: "Fal",     note: "fal.ai · text or image to video" },
   { id: "hailuo",          providerKey: "FAL_KEY", label: "Hailuo (Minimax)",  badge: "Alt",     note: "~3–5 min · different style" },
-  { id: "wan",             providerKey: "REPLICATE_API_TOKEN", label: "Wan 2.1",           badge: "Motion",  note: "Replicate · cinematic motion" },
-  { id: "veo",             providerKey: "GEMINI_API_KEY", label: "Gemini Veo",        badge: "Google",  note: "Google · text to video" },
+  { id: "fal-wan",         providerKey: "FAL_KEY", label: "Wan",                badge: "Fal",     note: "fal.ai · cinematic motion" },
 ] as const;
 
 const COMING_MODELS = [
-  { label: "Flux", note: "Image generation model" },
-  { label: "Seedream", note: "Image generation model" },
-  { label: "Seedance 2", note: "Requires Replicate connection" },
-  { label: "OmniHuman", note: "Requires Replicate connection" },
+  { label: "Flux", note: "Available in Image Orchestrate via fal.ai" },
+  { label: "Seedream", note: "Available in Image Orchestrate via fal.ai" },
+  { label: "OmniHuman", note: "Needs identity image and audio input" },
+  { label: "Kling LipSync", note: "Needs source video and audio input" },
 ] as const;
 
 const WIZARD_STEPS = [
@@ -435,7 +435,7 @@ export default function Studio() {
               <label className="flex cursor-pointer items-center justify-between gap-4">
                 <span>
                   <span className="flex items-center gap-2 text-sm font-semibold text-white"><AudioLines className="h-4 w-4 text-pink-400" /> Lip sync</span>
-                  <span className="mt-1 block text-xs text-white/35">Requires a connected Replicate provider and audio input.</span>
+                  <span className="mt-1 block text-xs text-white/35">fal.ai is connected. Audio upload support is the remaining requirement.</span>
                 </span>
                 <input type="checkbox" checked={false} disabled
                   className="h-5 w-5 cursor-not-allowed accent-pink-500 opacity-40" aria-label="Lip sync unavailable until a provider is connected" />

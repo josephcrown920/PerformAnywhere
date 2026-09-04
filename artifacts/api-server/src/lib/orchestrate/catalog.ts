@@ -18,9 +18,9 @@ export function estimateCredits(modality: Modality, options: Record<string, unkn
 
 export const CATALOG_DEFAULT_FALLBACKS: Record<Modality, string[]> = {
   text:  ["modelark", "groq", "gemini", "cohere", "lovable", "mistral", "pollinations", "huggingface", "openai"],
-  image: ["lovable", "pollinations", "huggingface", "fal", "replicate", "runware"],
-  video: ["kling", "wan", "veo", "sora", "huggingface", "replicate", "fal"],
-  audio: ["elevenlabs", "replicate"],
+  image: ["fal", "lovable", "pollinations", "huggingface", "runware"],
+  video: ["fal", "kling", "wan", "veo", "sora", "huggingface"],
+  audio: ["elevenlabs"],
 };
 
 // Providers that cost 0 credits (free-tier / key-based, no billing)
@@ -75,16 +75,13 @@ export const FALLBACK_MODELS: Record<Modality, Record<string, string>> = {
     pollinations: "flux",
     huggingface: "black-forest-labs/FLUX.1-schnell",
     fal: "fal-ai/flux/dev",
-    replicate: "black-forest-labs/flux-schnell",
     runware: "runware:100@1",
   },
   video: {
     kling: "kling-v1-6-std",
     fal: "fal-ai/kling-video/v1.6/pro/text-to-video",
-    replicate: "minimax/video-01",
   },
   audio: {
     elevenlabs: "eleven_multilingual_v2",
-    replicate: "meta/musicgen",
   },
 };

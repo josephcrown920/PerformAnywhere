@@ -166,6 +166,9 @@ importers:
 
   artifacts/api-server:
     dependencies:
+      '@replit/connectors-sdk':
+        specifier: ^0.3.0
+        version: 0.3.0
       '@supabase/supabase-js':
         specifier: ^2.108.2
         version: 2.108.2
@@ -1646,6 +1649,9 @@ packages:
         optional: true
       react-native:
         optional: true
+
+  '@replit/connectors-sdk@0.3.0':
+    resolution: {integrity: sha512-JBHKPL69UsegdqXXxgUsz+mCps1YwbJELx7SxxsazR9+J3/TWPcuK/tNVO6mGP9Hd+AqeV2pF7BeODoOSyzfDg==}
 
   '@replit/vite-plugin-cartographer@0.5.21':
     resolution: {integrity: sha512-E5rco8Mov05QDfUOjoim3MVJdDX0/pBYql5Jay3w9cqmU/QOL6cEOUAjsBZPB/V8FEChsk++sZUrcWt1bHaAoQ==}
@@ -4655,6 +4661,8 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
       - immer
+
+  '@replit/connectors-sdk@0.3.0': {}
 
   '@replit/vite-plugin-cartographer@0.5.21':
     dependencies:
