@@ -206,6 +206,48 @@ export const imageAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
     return { provider: "fal", model, output_url: url, raw: j };
   },
 
+  // Model Ark (ByteDance) Seedream image generation. The image endpoint
+  // returns either a hosted URL or (for some model activations) a base64 image.
+  modelark: async ({ model, prompt, options = {} }) => {
+    const key = env("MODEL_ARK_API_KEY");
+    if (!key) throw new ProviderUnconfigured("modelark");
+    const base = (env("MODEL_ARK_BASE_URL") ?? "https://ark.ap-southeast.bytepluses.com/api/v3").replace(/\/$/, "");
+    const response = await fetch(`${base}/images/generations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        prompt: String(prompt).slice(0, 4_000),
+        image: options.imageUrl ? [options.imageUrl] : undefined,
+        size: "2K",
+        sequential_image_generation: "disabled",
+        response_format: "url",
+        watermark: false,
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!response.ok) {
+      // Keep provider response bodies out of the direct director error path.
+      throw new Error(`modelark image request failed (${response.status})`);
+    }
+    let payload: any;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new Error("modelark image returned invalid response");
+    }
+    const first = Array.isArray(payload?.data) ? payload.data[0] : undefined;
+    const url = typeof first?.url === "string"
+      ? first.url
+      : typeof first?.image_url === "string"
+        ? first.image_url
+        : typeof first?.b64_json === "string"
+          ? `data:image/png;base64,${first.b64_json}`
+          : undefined;
+    if (!url) throw new Error("modelark image returned no image");
+    return { provider: "modelark", model, output_url: url };
+  },
+
   replicate: async ({ model, prompt, options = {} }) => {
     const key = env("REPLICATE_API_TOKEN");
     if (!key) throw new ProviderUnconfigured("replicate");
@@ -263,11 +305,11 @@ export const imageAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
 
 // ──────────────── VIDEO ────────────────
 
-function hasFalAuth(): boolean {
+export function hasFalAuth(): boolean {
   return Boolean(env("FAL_KEY") || env("REPLIT_CONNECTORS_HOSTNAME"));
 }
 
-async function falFetch(path: string, init: RequestInit = {}): Promise<Response> {
+export async function falFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const key = env("FAL_KEY");
   if (key) {
     return fetch(`https://queue.fal.run${path}`, {
@@ -293,12 +335,16 @@ async function falQueueWait(model: string, payload: Record<string, unknown>): Pr
   });
   if (!submit.ok) throw new Error(`fal submit ${submit.status}: ${await submit.text()}`);
   const { request_id } = await submit.json() as { request_id: string };
-  const appId = model.split("/").slice(0, 2).join("/");
+  // Use the full model ID as the namespace — the fal.ai queue API mirrors the
+  // submit path for status/result endpoints, so a 3-segment model like
+  // "fal-ai/bytedance/omnihuman" needs all three segments, not just the first two.
+  const appId = model;
   const statusPath = `/${appId}/requests/${request_id}/status`;
   const resultPath = `/${appId}/requests/${request_id}`;
   for (let i = 0; i < 120; i++) {
     await new Promise((r) => setTimeout(r, 5000));
     const s = await falFetch(statusPath);
+    if (!s.ok) throw new Error(`fal status check failed (HTTP ${s.status}): ${await s.text()}`);
     const sj = await s.json() as { status: string; error?: string };
     if (sj.status === "COMPLETED") {
       if (sj.error) throw new Error(`fal failed: ${sj.error}`);
@@ -306,6 +352,7 @@ async function falQueueWait(model: string, payload: Record<string, unknown>): Pr
       if (!r.ok) throw new Error(`fal result ${r.status}: ${await r.text()}`);
       return r.json() as Promise<Record<string, unknown>>;
     }
+    if (sj.status === "FAILED") throw new Error(`fal job failed: ${sj.error ?? "unknown error"}`);
   }
   throw new Error("fal timeout after 10 minutes");
 }
@@ -381,6 +428,115 @@ function extractMediaUrl(out: unknown): string | null {
 }
 
 export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterResult>> = {
+  // Model Ark (ByteDance) — Seedance 2.5 and other ByteDance video models via the
+  // Ark async content-generation task API.
+  // Requires MODEL_ARK_API_KEY (same key as text). Activate model IDs in your
+  // Ark console at https://console.volcengine.com/ark before using them.
+  //
+  // API shape (confirmed from docs):
+  //   POST /contents/generations/tasks
+  //   Body top-level fields: model, content[], ratio, duration, generate_audio, watermark
+  //   Content items: { type: "text"|"image_url"|"video_url"|"audio_url", ..., role? }
+  //   Image/video/audio references carry role: "reference_image"|"reference_video"|"reference_audio"
+  modelark: async ({ model, prompt, options = {} }) => {
+    const key = env("MODEL_ARK_API_KEY");
+    if (!key) throw new ProviderUnconfigured("modelark");
+
+    const base = (env("MODEL_ARK_BASE_URL") ?? "https://ark.ap-southeast.bytepluses.com/api/v3").replace(/\/$/, "");
+
+    // Build content array — text prompt first, then optional reference media
+    const content: Array<Record<string, unknown>> = [
+      { type: "text", text: String(prompt).slice(0, 2500) },
+    ];
+    if (options.imageUrl) {
+      content.push({ type: "image_url", image_url: { url: options.imageUrl }, role: "reference_image" });
+    }
+    if (options.videoUrl) {
+      content.push({ type: "video_url", video_url: { url: options.videoUrl }, role: "reference_video" });
+    }
+    if (options.audioUrl) {
+      content.push({ type: "audio_url", audio_url: { url: options.audioUrl }, role: "reference_audio" });
+    }
+
+    // ratio, duration, generate_audio, watermark are top-level — NOT nested under "parameters"
+    const body: Record<string, unknown> = {
+      model,
+      content,
+      ratio: options.aspectRatio ?? "16:9",
+      duration: options.duration ?? 5,
+      generate_audio: options.generateAudio !== false, // default true
+      watermark: options.watermark ?? false,
+    };
+
+    // Submit the generation task
+    const submit = await fetch(`${base}/contents/generations/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const stext = await submit.text();
+    if (!submit.ok) throw new Error(`modelark video submit ${submit.status}: ${stext.slice(0, 300)}`);
+    const sj = JSON.parse(stext) as { id?: string; task_id?: string; status?: string; error?: { message?: string } };
+    const taskId = sj.id ?? sj.task_id;
+    if (!taskId) throw new Error(`modelark video: no task id in response: ${stext.slice(0, 200)}`);
+
+    // Poll up to 10 minutes (ByteDance video tasks typically take 1–3 min)
+    for (let i = 0; i < 120; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      let poll: Response;
+      try {
+        poll = await fetch(`${base}/contents/generations/tasks/${taskId}`, {
+          headers: { Authorization: `Bearer ${key}` },
+          signal: AbortSignal.timeout(30_000),
+        });
+      } catch {
+        continue; // transient network error — keep polling
+      }
+      if (!poll.ok) continue;
+      const pj = await poll.json() as {
+        status?: string;
+        content?: Array<{
+          type: string;
+          // Ark currently returns video_url as an object in live responses,
+          // while older responses used a plain string. Support both.
+          video_url?: string | { url?: string };
+          url?: string;
+        }> | {
+          type?: string;
+          video_url?: string | { url?: string };
+          url?: string;
+        };
+        error?: { message?: string };
+      };
+      if (pj.error?.message) throw new Error(`modelark video: ${pj.error.message}`);
+      const st = pj.status ?? "";
+      if (st === "succeeded" || st === "success" || st === "completed") {
+        const contentItems = Array.isArray(pj.content)
+          ? pj.content
+          : pj.content
+            ? [pj.content]
+            : [];
+        const vid = contentItems.find((c) =>
+          c.type === "video" || c.type === "video_url" || Boolean(c.video_url),
+        );
+        const videoReference = vid?.video_url;
+        const url = typeof videoReference === "string"
+          ? videoReference
+          : videoReference && typeof videoReference === "object"
+            ? videoReference.url
+            : vid?.url;
+        if (!url) throw new Error(`modelark video: task ${st} but no video url in response: ${JSON.stringify(pj).slice(0, 300)}`);
+        return { provider: "modelark", model, output_url: url, raw: pj };
+      }
+      if (st === "failed" || st === "error" || st === "cancelled" || st === "expired") {
+        throw new Error(`modelark video generation ${st}: ${pj.error?.message ?? "no detail"}`);
+      }
+      // status is "pending" / "processing" / "running" — keep polling
+    }
+    throw new Error("modelark video: timeout after 10 minutes");
+  },
+
   // RunPod Serverless — runs the user's OWN deployed video endpoint.
   // Requires RUNPOD_API_KEY + RUNPOD_ENDPOINT_ID. The input payload shape is
   // defined by the deployed worker, so we send a common default and merge any
@@ -451,13 +607,23 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
             ? (options.imageUrl ? "fal-ai/kling-video/v1.6/pro/image-to-video" : "fal-ai/kling-video/v1.6/pro/text-to-video")
             : model === "fal-omnihuman"
               ? "fal-ai/bytedance/omnihuman"
-              : model;
+              : model === "fal-latentsync"
+                ? "fal-ai/latentsync/v2"
+                : model === "fal-flux"
+                  ? "fal-ai/flux-pro/v1.1"
+                  : model === "fal-seedream"
+                    ? "fal-ai/bytedance/seedream-3"
+                    : model;
 
     const isKlingLipSync = resolvedModel === "fal-ai/kling-video/lipsync/audio-to-video";
-    const isOmniHuman = resolvedModel === "fal-ai/bytedance/omnihuman";
+    const isLatentSync   = resolvedModel === "fal-ai/latentsync/v2";
+    const isOmniHuman    = resolvedModel === "fal-ai/bytedance/omnihuman";
 
     if (isKlingLipSync && (!options.videoUrl || !options.audioUrl)) {
       throw new Error("fal Kling LipSync requires videoUrl and audioUrl");
+    }
+    if (isLatentSync && (!options.videoUrl || !options.audioUrl)) {
+      throw new Error("fal LatentSync requires videoUrl and audioUrl");
     }
     if (isOmniHuman && (!options.imageUrl || !options.audioUrl)) {
       throw new Error("fal OmniHuman requires imageUrl (identity) and audioUrl");
@@ -465,24 +631,41 @@ export const videoAdapters: Record<string, (a: AdapterArgs) => Promise<AdapterRe
 
     const payload: Record<string, unknown> = isKlingLipSync
       ? { video_url: options.videoUrl, audio_url: options.audioUrl }
-      : isOmniHuman
-        ? { image_url: options.imageUrl, audio_url: options.audioUrl }
-        : {
-            prompt,
-            duration: options.duration ?? 5,
-            aspect_ratio: options.aspectRatio ?? "16:9",
-          };
-    if (!isKlingLipSync && !isOmniHuman) {
+      : isLatentSync
+        ? { video_url: options.videoUrl, audio_url: options.audioUrl }
+        : isOmniHuman
+          ? { image_url: options.imageUrl, audio_url: options.audioUrl }
+          : {
+              prompt,
+              duration: options.duration ?? 5,
+              aspect_ratio: options.aspectRatio ?? "16:9",
+            };
+    if (!isKlingLipSync && !isLatentSync && !isOmniHuman) {
       // image_url and video_url are mutually exclusive for most fal models (e.g. Wan i2v)
       if (options.imageUrl) payload.image_url = options.imageUrl;
       else if (options.videoUrl) payload.video_url = options.videoUrl;
       if (options.negativePrompt) payload.negative_prompt = options.negativePrompt;
     }
     const j = await falQueueWait(resolvedModel, payload);
+    // Video models return j.video.url; image models (Flux, Seedream) return j.images[0].url
+    const isImageModel = resolvedModel === "fal-ai/flux-pro/v1.1" || resolvedModel === "fal-ai/bytedance/seedream-3";
     const url = (j.video as { url?: string })?.url
       ?? (j.output as { url?: string })?.url
-      ?? (Array.isArray(j.output) ? (j.output as string[])[0] : undefined);
-    if (!url) throw new Error(`fal video: no url in response: ${JSON.stringify(j).slice(0, 300)}`);
+      ?? (Array.isArray(j.output) ? (j.output as string[])[0] : undefined)
+      ?? (isImageModel && Array.isArray((j as Record<string, unknown>).images)
+          ? ((j as Record<string, unknown[]>).images[0] as { url?: string })?.url
+          : undefined);
+    if (!url) {
+      // Give a model-specific diagnostic so artists know exactly what went wrong,
+      // rather than a raw JSON dump they cannot act on.
+      if (isLatentSync) {
+        throw new Error(
+          `LatentSync (fal-ai/latentsync/v2) returned an unexpected response — expected { video: { url } } but got: ${JSON.stringify(j).slice(0, 300)}. ` +
+          "Check that the performance video is a supported format (MP4/MOV) and the audio track is under the model's length limit.",
+        );
+      }
+      throw new Error(`fal output: no url in response: ${JSON.stringify(j).slice(0, 300)}`);
+    }
     return { provider: "fal", model: resolvedModel, output_url: url, raw: j };
   },
 
