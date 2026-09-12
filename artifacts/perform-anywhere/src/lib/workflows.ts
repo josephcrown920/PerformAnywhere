@@ -7,11 +7,6 @@ export type Workflow = {
   modelHints: string[];
 };
 
-/**
- * InVideo's public integration is a remote MCP workflow surface rather than
- * a public per-model generation API. These presets keep the workflow intent
- * explicit and produce prompts that can be handed to that surface.
- */
 export const WORKFLOWS: Workflow[] = [
   {
     id: "invideo-text-to-video",
@@ -108,6 +103,14 @@ export const WORKFLOWS: Workflow[] = [
     description: "Apply a controlled creative or detail-focused finish to an image.",
     promptPrefix: "Enhance the supplied image with a controlled finishing pass. Improve clarity and texture while preserving identity, composition, and important text; do not change the subject's features.",
     modelHints: ["Magnific Upscaler Creative", "Magnific Skin Enhancer"],
+  },
+  {
+    id: "get-ready-with-me",
+    provider: "invideo",
+    label: "Get Ready With Me",
+    description: "Turn a real getting-ready video into a cinematic GRWM using reference photos, reference clips, and a new outfit reference while preserving the user's actions and pacing.",
+    promptPrefix: "Create a cinematic Get Ready With Me video from the supplied self-recorded getting-ready video. Preserve the original person's identity, actions, gestures, timing, and natural performance. Use the supplied reference photos to lock identity, styling, environment, and visual continuity; use the supplied reference videos as motion, framing, and transition references; apply the supplied new outfit reference consistently across the sequence. Keep the result recognizably the same person and same performance, but transform the wardrobe and requested scene/look. Do not invent a different person, change the performance beats, or introduce unrelated subjects.",
+    modelHints: ["Seedance 2.5", "Kling V3 Omni Video", "P-Video Animate"],
   },
 ];
 
