@@ -2,69 +2,14 @@ import type { WorkflowDefinition } from "./types.js";
 
 const commonRatios = ["16:9", "9:16", "1:1", "4:5", "4:3"];
 const identity = ["identity-lock", "reference-image", "wardrobe-lock", "hair-lock", "character-consistency"];
+const seedance = "modelark/seedance-2-5";
 
 export const WORKFLOWS: WorkflowDefinition[] = [
-  {
-    id: "perform-anywhere/motion-transfer-v1", version: "1.0.0", name: "Perform Anywhere — Motion Transfer",
-    description: "Transfer a recorded performance to a new identity, outfit and scene while preserving motion and timing.",
-    category: "video-to-video", modalities: ["video"], supportedAspectRatios: commonRatios, durationSeconds: { min: 1, max: 60 },
-    tiers: {
-      fast: { provider: "fal", model: "motion-transfer-fast", estimatedSeconds: 30, estimatedCredits: 400 },
-      balanced: { provider: "fal", model: "motion-transfer-balanced", estimatedSeconds: 60, estimatedCredits: 700 },
-      quality: { provider: "fal", model: "motion-transfer-quality", estimatedSeconds: 120, estimatedCredits: 1200 },
-    },
-    requirements: [{ id: "performance-video", kind: "model", required: true }, { id: "identity-image", kind: "model", required: true }, { id: "motion-control", kind: "controlnet", required: true }],
-    capabilities: [...identity, "motion-control", "pose-transfer", "performance-preservation", "scene-replacement", "outfit-transfer"], tags: ["perform-anywhere", "motion", "identity"], source: "official",
-  },
-  {
-    id: "perform-anywhere/music-video-v1", version: "1.0.0", name: "Music Video Suite",
-    description: "Performance-led music video generation with lip sync, beat-aware cuts, camera choreography and continuity.",
-    category: "music-video", modalities: ["video", "audio"], supportedAspectRatios: commonRatios, durationSeconds: { min: 5, max: 180 },
-    tiers: {
-      fast: { provider: "fal", model: "music-video-fast", estimatedSeconds: 45, estimatedCredits: 600 },
-      balanced: { provider: "fal", model: "music-video-balanced", estimatedSeconds: 90, estimatedCredits: 1000 },
-      quality: { provider: "fal", model: "music-video-quality", estimatedSeconds: 180, estimatedCredits: 1800 },
-    },
-    requirements: [{ id: "audio", kind: "model", required: true }, { id: "identity", kind: "model", required: true }, { id: "motion", kind: "controlnet", required: true }],
-    capabilities: ["lip-sync", "beat-sync", "camera-choreography", "dance-transfer", "multi-shot", "character-continuity", "outfit-changes"], tags: ["music", "performance", "seedance"], source: "official",
-  },
-  {
-    id: "ads/product-ad-factory-v1", version: "1.0.0", name: "Product Ad Factory",
-    description: "Generate studio, lifestyle, UGC, luxury and cinematic product-ad variants from one product reference.",
-    category: "product-ad", modalities: ["image", "video"], supportedAspectRatios: ["9:16", "16:9", "1:1", "4:5"], durationSeconds: { min: 5, max: 30 },
-    tiers: {
-      fast: { provider: "fal", model: "product-ad-fast", estimatedSeconds: 30, estimatedCredits: 300 },
-      balanced: { provider: "fal", model: "product-ad-balanced", estimatedSeconds: 60, estimatedCredits: 600 },
-      quality: { provider: "fal", model: "product-ad-quality", estimatedSeconds: 120, estimatedCredits: 1000 },
-    },
-    requirements: [{ id: "product-reference", kind: "model", required: true }],
-    capabilities: ["product-lock", "studio", "lifestyle", "ugc", "luxury", "cinematic", "variant-generation", "6s", "15s", "30s"], tags: ["ads", "agency", "product"], source: "official",
-  },
-  {
-    id: "character/identity-lock-v1", version: "1.0.0", name: "Character & Identity Lock",
-    description: "Maintain identity, wardrobe, hair, body and visual style across generated shots.",
-    category: "character-consistency", modalities: ["image", "video"], supportedAspectRatios: commonRatios,
-    tiers: {
-      fast: { provider: "fal", model: "identity-lock-fast", estimatedSeconds: 20, estimatedCredits: 100 },
-      balanced: { provider: "fal", model: "identity-lock-balanced", estimatedSeconds: 45, estimatedCredits: 250 },
-      quality: { provider: "fal", model: "identity-lock-quality", estimatedSeconds: 90, estimatedCredits: 500 },
-    },
-    requirements: [{ id: "reference", kind: "model", required: true }, { id: "face-identity", kind: "lora", required: false }],
-    capabilities: identity, tags: ["identity", "character", "consistency"], source: "official",
-  },
-  {
-    id: "social/creative-variants-v1", version: "1.0.0", name: "Social Creative Variant Factory",
-    description: "Create structured A/B variants across hook, framing, camera movement, environment and composition.",
-    category: "social", modalities: ["image", "video"], supportedAspectRatios: ["9:16", "1:1", "4:5", "16:9"], durationSeconds: { min: 3, max: 60 },
-    tiers: {
-      fast: { provider: "fal", model: "creative-variants-fast", estimatedSeconds: 25, estimatedCredits: 200 },
-      balanced: { provider: "fal", model: "creative-variants-balanced", estimatedSeconds: 50, estimatedCredits: 400 },
-      quality: { provider: "fal", model: "creative-variants-quality", estimatedSeconds: 100, estimatedCredits: 800 },
-    },
-    requirements: [{ id: "reference", kind: "model", required: true }],
-    capabilities: ["ab-testing", "hooks", "camera-variants", "environment-variants", "contact-sheet", "batch-generation"], tags: ["social", "ads", "testing"], source: "official",
-  },
+  { id: "perform-anywhere/motion-transfer-v1", version: "1.0.0", name: "Perform Anywhere — Motion Transfer", description: "Transfer a recorded performance to a new identity, outfit and scene while preserving motion and timing.", category: "video-to-video", modalities: ["video"], supportedAspectRatios: commonRatios, durationSeconds: { min: 1, max: 60 }, tiers: { fast: { provider: "modelark", model: seedance, estimatedSeconds: 30, estimatedCredits: 400 }, balanced: { provider: "modelark", model: seedance, estimatedSeconds: 60, estimatedCredits: 700 }, quality: { provider: "modelark", model: seedance, estimatedSeconds: 120, estimatedCredits: 1200 } }, requirements: [{ id: "performance-video", kind: "model", required: true }, { id: "identity-image", kind: "model", required: true }, { id: "motion-control", kind: "controlnet", required: true }], capabilities: [...identity, "motion-control", "pose-transfer", "performance-preservation", "scene-replacement", "outfit-transfer"], tags: ["perform-anywhere", "motion", "identity", "seedance"], source: "official" },
+  { id: "perform-anywhere/music-video-v1", version: "1.0.0", name: "Music Video Suite", description: "Performance-led music video generation with lip sync, beat-aware cuts, camera choreography and continuity.", category: "music-video", modalities: ["video", "audio"], supportedAspectRatios: commonRatios, durationSeconds: { min: 5, max: 180 }, tiers: { fast: { provider: "modelark", model: seedance, estimatedSeconds: 45, estimatedCredits: 600 }, balanced: { provider: "modelark", model: seedance, estimatedSeconds: 90, estimatedCredits: 1000 }, quality: { provider: "modelark", model: seedance, estimatedSeconds: 180, estimatedCredits: 1800 } }, requirements: [{ id: "audio", kind: "model", required: true }, { id: "identity", kind: "model", required: true }, { id: "motion", kind: "controlnet", required: true }], capabilities: ["lip-sync", "beat-sync", "camera-choreography", "dance-transfer", "multi-shot", "character-continuity", "outfit-changes"], tags: ["music", "performance", "seedance"], source: "official" },
+  { id: "ads/product-ad-factory-v1", version: "1.0.0", name: "Product Ad Factory", description: "Generate studio, lifestyle, UGC, luxury and cinematic product-ad variants from one product reference.", category: "product-ad", modalities: ["image", "video"], supportedAspectRatios: ["9:16", "16:9", "1:1", "4:5"], durationSeconds: { min: 5, max: 30 }, tiers: { fast: { provider: "fal", model: "product-ad-fast", estimatedSeconds: 30, estimatedCredits: 300 }, balanced: { provider: "fal", model: "product-ad-balanced", estimatedSeconds: 60, estimatedCredits: 600 }, quality: { provider: "fal", model: "product-ad-quality", estimatedSeconds: 120, estimatedCredits: 1000 } }, requirements: [{ id: "product-reference", kind: "model", required: true }], capabilities: ["product-lock", "studio", "lifestyle", "ugc", "luxury", "cinematic", "variant-generation", "6s", "15s", "30s"], tags: ["ads", "agency", "product"], source: "official" },
+  { id: "character/identity-lock-v1", version: "1.0.0", name: "Character & Identity Lock", description: "Maintain identity, wardrobe, hair, body and visual style across generated shots.", category: "character-consistency", modalities: ["image", "video"], supportedAspectRatios: commonRatios, tiers: { fast: { provider: "fal", model: "identity-lock-fast", estimatedSeconds: 20, estimatedCredits: 100 }, balanced: { provider: "fal", model: "identity-lock-balanced", estimatedSeconds: 45, estimatedCredits: 250 }, quality: { provider: "fal", model: "identity-lock-quality", estimatedSeconds: 90, estimatedCredits: 500 } }, requirements: [{ id: "reference", kind: "model", required: true }, { id: "face-identity", kind: "lora", required: false }], capabilities: identity, tags: ["identity", "character", "consistency"], source: "official" },
+  { id: "social/creative-variants-v1", version: "1.0.0", name: "Social Creative Variant Factory", description: "Create structured A/B variants across hook, framing, camera movement, environment and composition.", category: "social", modalities: ["image", "video"], supportedAspectRatios: ["9:16", "1:1", "4:5", "16:9"], durationSeconds: { min: 3, max: 60 }, tiers: { fast: { provider: "fal", model: "creative-variants-fast", estimatedSeconds: 25, estimatedCredits: 200 }, balanced: { provider: "fal", model: "creative-variants-balanced", estimatedSeconds: 50, estimatedCredits: 400 }, quality: { provider: "fal", model: "creative-variants-quality", estimatedSeconds: 100, estimatedCredits: 800 } }, requirements: [{ id: "reference", kind: "model", required: true }], capabilities: ["ab-testing", "hooks", "camera-variants", "environment-variants", "contact-sheet", "batch-generation"], tags: ["social", "ads", "testing"], source: "official" },
 ];
-
 export function listWorkflows(): WorkflowDefinition[] { return WORKFLOWS; }
 export function getWorkflow(id: string): WorkflowDefinition | undefined { return WORKFLOWS.find((w) => w.id === id); }
