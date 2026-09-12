@@ -3,11 +3,12 @@ import { listWorkflows, getWorkflow } from "../lib/workflow-engine/registry.js";
 import { planWorkflow } from "../lib/workflow-engine/planner.js";
 import { checkCompatibility, dependencyInstallPlan } from "../lib/workflow-engine/compatibility.js";
 import { defaultGpuCandidates, rankGpuCandidates } from "../lib/workflow-engine/gpu-router.js";
+import { SEEDANCE_PROFILES } from "../lib/workflow-engine/seedance.js";
 import type { WorkflowRequest } from "../lib/workflow-engine/types.js";
 
 const router = Router();
-
 router.get("/", (_req, res) => res.json({ workflows: listWorkflows(), count: listWorkflows().length }));
+router.get("/seedance", (_req, res) => res.json({ models: SEEDANCE_PROFILES }));
 router.get("/gpus/race", (req, res) => {
   const minVram = Number(req.query.minVramGb ?? 0);
   const freeOnly = String(req.query.freeOnly ?? "false") === "true";
