@@ -1,16 +1,6 @@
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "") + "/api";
-
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
-  return res.json() as Promise<T>;
-}
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
-  if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
-  return res.json() as Promise<T>;
-}
-
+async function post<T>(path: string, body: unknown): Promise<T> { const res = await fetch(`${BASE}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`); return res.json() as Promise<T>; }
+async function get<T>(path: string): Promise<T> { const res = await fetch(`${BASE}${path}`); if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`); return res.json() as Promise<T>; }
 export type Modality = "text" | "image" | "video" | "audio";
 export type WalletData = { balance: number; lifetime_purchased: number; lifetime_spent: number };
 export type GenerationRow = { id: string; modality: string; provider: string; model: string; prompt: string | null; status: string; output_url: string | null; output_text: string | null; credits_used: number; created_at: string };
@@ -21,11 +11,9 @@ export type PollRenderResult = { status: "queued" | "running" | "succeeded" | "f
 export type SignedUrlResult = { url: string };
 export type EnhancePromptResult = { prompt: string };
 export type PaystackInitResult = { authorization_url?: string; reference?: string };
-
-export type WorkflowPack = { id: string; name: string; description: string; category: string; provider: string; model: string; requirements?: Array<{ id: string; type: string; required: boolean }> };
-export type WorkflowPlan = { workflow: WorkflowPack; provider: string; model: string; quality: "fast" | "balanced" | "quality"; fallbacks: string[]; score: number; reasons: string[] };
-export type GpuCandidate = { id: string; provider: string; label: string; vramGb: number; queueMinutes: number; estimatedCostUsd: number; available: boolean; free: boolean; endpoint?: string };
-
+export type WorkflowPack = { id: string; version?: string; name: string; description: string; category: string; provider?: string; model?: string; modalities?: string[]; supportedAspectRatios?: string[]; capabilities?: string[]; requirements?: Array<{ id: string; kind: string; required: boolean; minVramGb?: number }> };
+export type WorkflowPlan = { workflow: WorkflowPack; provider: string; model: string; quality: "fast" | "balanced" | "quality"; score: number; reasons: string[]; fallbackProviders: string[] };
+export type GpuCandidate = { id: string; provider: string; gpu: string; vramGb: number; queueSeconds: number; estimatedCostPerMinute: number; available: boolean; endpoint?: string };
 export const api = {
   wallet: (clientId: string) => post<WalletData>("/orchestrate/wallet", { clientId }),
   listGenerations: (clientId: string) => post<GenerationRow[]>("/orchestrate/list", { clientId }),
@@ -40,7 +28,7 @@ export const api = {
   getPublicRender: (clientId: string, projectId: string) => get<{ id: string; title: string; provider: string; model: string | null; prompt: string | null; created_at: string; videoUrl: string }>(`/render/public/${encodeURIComponent(clientId)}/${encodeURIComponent(projectId)}`),
   enhancePrompt: (body: { scenePrompt: string; stylePrompt: string; hasOutfit: boolean; hasScene: boolean; hasIdentity: boolean }) => post<EnhancePromptResult>("/prompt/enhance", body),
   listWorkflows: () => get<{ workflows: WorkflowPack[]; count: number }>("/workflows"),
-  planWorkflow: (body: Record<string, unknown>) => post<WorkflowPlan>("/workflows/plan", body),
-  raceGpus: (params: { minVramGb?: number; freeOnly?: boolean } = {}) => get<{ candidates: GpuCandidate[] }>(`/workflows/gpus/race?minVramGb=${params.minVramGb ?? 0}&freeOnly=${params.freeOnly ? "true" : "false"}`),
+  planWorkflow: (body: { task: string; modality: Modality; category?: string; aspectRatio?: string; durationSeconds?: number; quality?: "fast" | "balanced" | "quality"; preferredProvider?: string; freeOnly?: boolean; minVramGb?: number; capabilities?: string[] }) => post<WorkflowPlan>("/workflows/plan", body),
+  raceGpus: (params: { minVramGb?: number; freeOnly?: boolean } = {}) => get<{ candidates: GpuCandidate[] }>(`/workflows/gpus/race?minVram=${params.minVramGb ?? 0}&freeOnly=${params.freeOnly ? "true" : "false"}`),
   seedanceProfiles: () => get<{ models: Array<Record<string, unknown>> }>("/workflows/seedance"),
 };
