@@ -8,146 +8,116 @@ No accounts. No subscriptions. Pay with Paystack, render takes.
 
 ## Architecture
 
-```
+```text
 workspace/
 ├── artifacts/
-│   ├── perform-anywhere/     # React + Vite SPA  (port 21597, preview: /)
-│   └── api-server/           # Express API server (port 8080)
+│   ├── perform-anywhere/     # React + Vite SPA
+│   └── api-server/           # Express API server
 └── lib/
-    ├── api-spec/             # OpenAPI spec (healthz only; app uses direct routes)
+    ├── api-spec/             # OpenAPI spec
     └── api-zod/              # Generated Zod schemas
 ```
 
 ### Identity model
 
-No auth. Every browser generates a UUID (`ps_client_id`) stored in `localStorage`. All Supabase rows carry `client_id uuid` — RLS is permissive (anon key can read/write own rows).
+No auth. Every browser generates a UUID (`ps_client_id`) stored in `localStorage`. Supabase rows carry `client_id uuid`.
 
 ### Frontend → Backend split
 
 | Concern | Where |
 |---|---|
-| Projects list, project detail, asset metadata reads | Supabase JS client (direct from browser) |
-| File uploads | Supabase Storage (`uploads` bucket) via browser client |
-| Video renders (Kling/Runway, long-running) | `POST /api/render/start` → fires background job on API server |
-| Credit wallet, generation history | `POST /api/orchestrate/wallet` / `/list` |
-| AI generation (text/image/video/audio) | `POST /api/orchestrate/run` |
+| Projects and asset metadata | Supabase JS client |
+| File uploads | Supabase Storage |
+| Video renders | `POST /api/render/start` |
+| Credit wallet/history | `/api/orchestrate/*` |
+| AI generation | `POST /api/orchestrate/run` |
 | Prompt enhancement | `POST /api/prompt/enhance` |
-| Paystack top-up init | `POST /api/orchestrate/paystack` |
-| Paystack webhook (credit grant) | `POST /api/paystack-webhook` |
-
----
+| Paystack top-up | `POST /api/orchestrate/paystack` |
+| Paystack webhook | `POST /api/paystack-webhook` |
 
 ## Pages
 
-| Route | Page | Purpose |
-|---|---|---|
-| `/` | Landing | Marketing — how it works, input list, CTA |
-| `/projects` | Projects | Library of all projects for the current session |
-| `/projects/:id` | Project Detail | Input preview, render status/video, retry controls |
-| `/studio` | Studio wizard | 3-step wizard: assets → direction → review → render |
-| `/orchestrate` | Orchestrate | Unified AI panel (text/image/video/audio) + wallet |
-| `/account` | Account / Settings | Session ID, reset, provider key status |
-
----
+| Route | Purpose |
+|---|---|
+| `/` | Landing |
+| `/projects` | Project library |
+| `/projects/:id` | Project detail and render status |
+| `/studio` | Studio wizard |
+| `/orchestrate` | Unified AI generation panel |
+| `/account` | Session/settings |
 
 ## API routes
 
-```
+```text
 GET  /api/healthz
-GET  /api/render/providers          → provider key status list
-POST /api/render/start              → queue a render job (fire-and-forget)
-POST /api/render/poll               → project status + output path
-POST /api/render/retry              → switch provider + reset status
-POST /api/render/signed-url/render  → signed URL for output video
-POST /api/render/signed-url/asset   → signed URL for input asset
-
-POST /api/orchestrate/wallet        → credit wallet balance
-POST /api/orchestrate/list          → generation history
-POST /api/orchestrate/run           → run an AI generation (text/image/video/audio)
-POST /api/orchestrate/paystack      → init Paystack transaction
-
-POST /api/prompt/enhance            → AI cinematic prompt writer
-
-POST /api/paystack-webhook          → HMAC-verified credit grant webhook
+GET  /api/render/providers
+POST /api/render/start
+POST /api/render/poll
+POST /api/render/retry
+POST /api/render/signed-url/render
+POST /api/render/signed-url/asset
+POST /api/orchestrate/wallet
+POST /api/orchestrate/list
+POST /api/orchestrate/run
+POST /api/orchestrate/paystack
+POST /api/prompt/enhance
+POST /api/paystack-webhook
 ```
 
----
+## Workflow Engine Upgrade
+
+Perform Anywhere now includes a provider-neutral workflow engine: registry, intelligent planner, compatibility checks, GPU racing, shot construction, creative variants, marketplace manifests, benchmarking, and Seedance capability profiles.
+
+### Workflow packs
+
+- Perform Anywhere Motion Transfer — performance preservation, motion/pose transfer, identity/outfit/scene replacement.
+- Music Video Suite — lip sync, beat sync, camera choreography, dance transfer, multi-shot continuity and outfit changes.
+- Product Ad Factory — studio, lifestyle, UGC, luxury and cinematic variants in 6/15/30-second formats.
+- Character & Identity Lock — identity, wardrobe, hair and character consistency.
+- Social Creative Variant Factory — hooks, camera, environment and composition A/B matrices with batch generation.
+
+### Workflow API
+
+```text
+GET  /api/workflows
+GET  /api/workflows/:id
+GET  /api/workflows/gpus/race?minVramGb=24&freeOnly=true
+POST /api/workflows/plan
+POST /api/workflows/compatibility
+```
+
+The planner scores task, modality, category, aspect ratio, duration, provider preference and requested capabilities. GPU routing ranks available workers by queue time and estimated cost, including a free-only mode. Compatibility checks expose missing dependencies before execution.
+
+### Perform Anywhere controls
+
+The shot-builder contract is Scene → Subject → Camera → Motion → Lighting → Style → Duration → Aspect Ratio. Variant matrices cover hooks, cameras, environments and compositions.
+
+Seedance profiles include Seedance 2.5, Seedance 2.5 Pro and Seedance 2.5 Fast. Provider/model invocation remains behind the existing generation boundary so credentials and live endpoint behavior stay centralized.
 
 ## Environment variables
 
-| Key | Used by | Purpose |
-|---|---|---|
-| `VITE_SUPABASE_URL` | Frontend | Supabase project URL |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Frontend | Supabase anon/public key |
-| `SUPABASE_URL` | API server | Same URL, server-side |
-| `SUPABASE_PUBLISHABLE_KEY` | API server | Same anon key, server-side |
-| `KLING_ACCESS_KEY` | API server | Kling AI video — access key |
-| `KLING_SECRET_KEY` | API server | Kling AI video — secret key (JWT signing) |
-| `RUNWAY_API_KEY` | API server | Runway ML (optional fallback) |
-| `FAL_KEY` | API server | Fal.ai image + video (optional) |
-| `REPLICATE_API_TOKEN` | API server | Replicate models (optional) |
-| `LOVABLE_API_KEY` | API server | Lovable AI Gateway — text + image |
-| `GROQ_API_KEY` | API server | Groq LLMs — fast text (optional) |
-| `GEMINI_API_KEY` | API server | Google Gemini direct (optional) |
-| `OPENAI_API_KEY` | API server | OpenAI (optional) |
-| `HUGGINGFACE_API_KEY` | API server | HuggingFace inference (optional) |
-| `ELEVENLABS_API_KEY` | API server | ElevenLabs TTS (optional) |
-| `PAYSTACK_SECRET_KEY` | API server | Paystack billing + webhook verification |
+| Key | Purpose |
+|---|---|
+| `VITE_SUPABASE_URL` | Frontend Supabase URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Frontend Supabase key |
+| `SUPABASE_URL` | API Supabase URL |
+| `SUPABASE_PUBLISHABLE_KEY` | API Supabase key |
+| `KLING_ACCESS_KEY` / `KLING_SECRET_KEY` | Kling |
+| `RUNWAY_API_KEY` | Runway |
+| `FAL_KEY` | Fal |
+| `REPLICATE_API_TOKEN` | Replicate |
+| `MODEL_ARK_API_KEY` | BytePlus ModelArk |
+| `PAYSTACK_SECRET_KEY` | Paystack |
 
-Missing provider keys are not errors — the runner degrades gracefully with automatic fallback.
-
----
-
-## Supabase schema (key tables)
-
-```sql
-projects          — id, client_id, title, status, provider, scene_prompt, style_prompt, enhanced_prompt, output_path, error_message
-project_assets    — project_id, client_id, kind (performance|identity|outfit|scene), storage_path, mime_type
-project_renders   — project_id, client_id, provider, status, prompt, output_path, error_message
-generations       — client_id, modality, provider, model, prompt, status, output_url, output_text, credits_used
-credit_wallets    — client_id, balance, lifetime_purchased, lifetime_spent
-credit_ledger     — client_id, delta, reason, generation_id, purchase_id
-purchases         — client_id, paystack_reference, amount_paid_minor, currency, credits_allocated
-```
-
-Supabase RPCs: `spend_credits`, `grant_credits` (atomic, prevent race conditions).
-
----
+Missing optional provider keys continue to use the existing fallback behavior.
 
 ## Development
 
 ```bash
-# Install
 pnpm install
-
-# Start both servers (each has its own workflow in Replit)
-pnpm --filter @workspace/perform-anywhere run dev   # frontend
-pnpm --filter @workspace/api-server run dev         # API
+pnpm --filter @workspace/perform-anywhere run dev
+pnpm --filter @workspace/api-server run dev
 ```
-
----
-
-## Smoke tests
-
-```bash
-# Health
-curl http://localhost:8080/api/healthz
-
-# Provider status
-curl http://localhost:8080/api/render/providers
-
-# Wallet (returns zero-balance row for new IDs)
-curl -X POST http://localhost:8080/api/orchestrate/wallet \
-  -H "Content-Type: application/json" \
-  -d '{"clientId":"00000000-0000-0000-0000-000000000000"}'
-
-# Prompt enhancement
-curl -X POST http://localhost:8080/api/prompt/enhance \
-  -H "Content-Type: application/json" \
-  -d '{"scenePrompt":"neon Tokyo alley","stylePrompt":"35mm grain","hasIdentity":true,"hasOutfit":false,"hasScene":false}'
-```
-
----
 
 ## Credit pricing
 
@@ -158,25 +128,12 @@ curl -X POST http://localhost:8080/api/prompt/enhance \
 | Video | 200 credits / second |
 | Audio | 75 credits / request |
 
-1 NGN = 1 credit (Paystack top-up).
+1 NGN = 1 credit for Paystack top-ups.
 
----
+## Existing provider fallback
 
-## Provider fallback chain
+The existing runner uses ordered provider fallbacks for text, image, video and audio and degrades gracefully when optional keys are unavailable. The workflow engine adds planning/routing above that boundary rather than replacing it.
 
-Each modality has an ordered fallback list. If the selected provider fails or is unconfigured, the runner tries the next one automatically.
+## Production roadmap represented by the new contracts
 
-```
-text:  lovable → gemini → groq → mistral → pollinations → huggingface → openai → cohere
-image: lovable → pollinations → huggingface → fal → replicate → runware
-video: kling → fal → replicate
-audio: elevenlabs → replicate
-```
-
-Pollinations requires no API key and is used as a free text/image fallback.
-
----
-
-## Migrated from
-
-Originally built with Lovable / TanStack Start. Migrated to this Replit pnpm monorepo. The Supabase project (`dgtnkkarlwufxawfaybb`) and all existing data are shared — no data was lost in the migration.
+Workflow versioning, dependency manifests, official/community/private sources, fallback provider planning, batch generation, creative A/B testing, GPU-aware execution and benchmark metrics are represented as stable backend contracts. Execution adapters can be connected incrementally without replacing the existing Express/Supabase/Paystack architecture.
