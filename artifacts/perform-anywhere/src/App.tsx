@@ -10,6 +10,7 @@ import Orchestrate from "@/pages/Orchestrate";
 import Account from "@/pages/Account";
 
 const queryClient = new QueryClient();
+
 function Router() {
   return <Switch>
     <Route path="/" component={Landing} />
