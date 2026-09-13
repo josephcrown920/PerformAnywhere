@@ -29,6 +29,6 @@ export const api = {
   enhancePrompt: (body: { scenePrompt: string; stylePrompt: string; hasOutfit: boolean; hasScene: boolean; hasIdentity: boolean }) => post<EnhancePromptResult>("/prompt/enhance", body),
   listWorkflows: () => get<{ workflows: WorkflowPack[]; count: number }>("/workflows"),
   planWorkflow: (body: { task: string; modality: Modality; category?: string; aspectRatio?: string; durationSeconds?: number; quality?: "fast" | "balanced" | "quality"; preferredProvider?: string; freeOnly?: boolean; minVramGb?: number; capabilities?: string[] }) => post<WorkflowPlan>("/workflows/plan", body),
-  raceGpus: (params: { minVramGb?: number; freeOnly?: boolean } = {}) => get<{ candidates: GpuCandidate[] }>(`/workflows/gpus/race?minVram=${params.minVramGb ?? 0}&freeOnly=${params.freeOnly ? "true" : "false"}`),
+  raceGpus: (params: { minVramGb?: number; freeOnly?: boolean } = {}) => get<{ candidates: GpuCandidate[] }>(`/workflows/gpus/race?minVramGb=${params.minVramGb ?? 0}&freeOnly=${params.freeOnly ? "true" : "false"}`),
   seedanceProfiles: () => get<{ models: Array<Record<string, unknown>> }>("/workflows/seedance"),
 };
