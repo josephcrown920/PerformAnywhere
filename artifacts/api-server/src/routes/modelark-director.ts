@@ -2,7 +2,7 @@ import { Router } from "express";
 
 const router = Router();
 
-router.post("/api/modelark-director", async (req, res) => {
+router.post("/modelark-director", async (req, res) => {
   const token = process.env.AURORA_MCP_TOKEN?.trim();
   const auth = req.header("authorization") || "";
   if (!token) return res.status(503).json({ error: "AURORA_MCP_TOKEN is not configured" });
