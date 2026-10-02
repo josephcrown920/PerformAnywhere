@@ -1,24 +1,38 @@
 import { Router } from "express";
-import { runModelArkDirector } from "../lib/modelark-director";
 
 const router = Router();
 
-function authorized(req: any) {
-  const token = process.env.AURORA_MCP_TOKEN?.trim();
-  if (!token) return false;
-  return req.headers.authorization === `Bearer ${token}`;
-}
-
 router.post("/modelark-director", async (req, res) => {
-  if (!process.env.AURORA_MCP_TOKEN?.trim()) return res.status(503).json({ error: "AURORA_MCP_TOKEN is not configured." });
-  if (!authorized(req)) return res.status(401).json({ error: "Unauthorized" });
-  const instruction = typeof req.body?.instruction === "string" ? req.body.instruction.trim() : "";
-  if (!instruction) return res.status(400).json({ error: "instruction is required" });
+  const token = process.env.AURORA_MCP_TOKEN?.trim();
+  const auth = req.header("authorization") || "";
+  if (!token) return res.status(503).json({ error: "AURORA_MCP_TOKEN is not configured" });
+  if (auth !== `Bearer ${token}`) return res.status(401).json({ error: "Unauthorized" });
+
+  const instruction = req.body?.instruction;
+  if (typeof instruction !== "string" || !instruction.trim()) {
+    return res.status(400).json({ error: "instruction is required" });
+  }
+
+  const url = process.env.AURORA_MCP_URL?.trim();
+  if (!url) return res.status(503).json({ error: "AURORA_MCP_URL is not configured" });
+
   try {
-    const result = await runModelArkDirector(instruction, req.body?.context || {});
-    return res.json({ ok: true, role: "master_director", ...result });
+    const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+    const init = await fetch(url, {
+      method: "POST", headers,
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "aurora-agent-bridge", version: "1.0.0" } } }),
+    });
+    if (!init.ok) throw new Error(`Aurora MCP initialize failed: ${init.status}`);
+
+    const result = await fetch(url, {
+      method: "POST", headers,
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "aurora_modelark_director", arguments: { instruction: instruction.trim(), context: req.body?.context } } }),
+    });
+    const payload = await result.json().catch(() => ({}));
+    if (!result.ok) throw new Error(payload?.error?.message || `Aurora MCP director failed: ${result.status}`);
+    return res.status(200).json(payload);
   } catch (error) {
-    return res.status(502).json({ ok: false, error: error instanceof Error ? error.message : "ModelArk director failed" });
+    return res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
 
