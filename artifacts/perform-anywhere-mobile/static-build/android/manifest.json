@@ -1,0 +1,110 @@
+{
+  "id": "948abbb8-e717-470e-9107-5da35cf1f057",
+  "createdAt": "2026-09-13T09:16:47.065Z",
+  "runtimeVersion": "exposdk:57.0.0",
+  "launchAsset": {
+    "key": "bundle-1789291007065-1428",
+    "contentType": "application/javascript",
+    "url": "https://cf884a5c-2a11-4f78-8b90-0e262a2e285b-00-gm945a7rzajv.riker.replit.dev/1789291007065-1428/_expo/static/js/android/bundle.js"
+  },
+  "assets": [],
+  "metadata": {},
+  "extra": {
+    "eas": {},
+    "expoClient": {
+      "name": "Perform Anywhere",
+      "slug": "perform-anywhere-mobile",
+      "version": "1.0.0",
+      "orientation": "portrait",
+      "icon": "./assets/images/icon.png",
+      "scheme": "perform-anywhere-mobile",
+      "userInterfaceStyle": "dark",
+      "ios": {
+        "supportsTablet": false,
+        "infoPlist": {
+          "NSCameraUsageDescription": "Perform Anywhere needs your camera to film performances and record reference clips.",
+          "NSMicrophoneUsageDescription": "Perform Anywhere needs microphone access when recording video performances.",
+          "NSPhotoLibraryUsageDescription": "Perform Anywhere needs access to your photo library to upload reference images and video clips."
+        }
+      },
+      "android": {
+        "package": "com.aurora.studio",
+        "versionCode": 1,
+        "adaptiveIcon": {
+          "foregroundImage": "./assets/images/icon.png",
+          "backgroundColor": "#09060f",
+          "foregroundImageUrl": "http://127.0.0.1:8081/assets/./assets/images/icon.png"
+        },
+        "permissions": [
+          "android.permission.CAMERA",
+          "android.permission.RECORD_AUDIO"
+        ]
+      },
+      "web": {
+        "favicon": "./assets/images/icon.png"
+      },
+      "plugins": [
+        "expo-router",
+        [
+          "expo-splash-screen",
+          {
+            "image": "./assets/images/splash.png",
+            "resizeMode": "contain",
+            "backgroundColor": "#09060f"
+          }
+        ],
+        [
+          "expo-image-picker",
+          {
+            "photosPermission": "Perform Anywhere needs access to your camera roll to upload reference images and performances.",
+            "cameraPermission": "Perform Anywhere needs your camera to film performances and capture reference photos."
+          }
+        ]
+      ],
+      "experiments": {
+        "typedRoutes": true,
+        "reactCompiler": true
+      },
+      "_internal": {
+        "isDebug": false,
+        "projectRoot": "/home/runner/workspace/artifacts/perform-anywhere-mobile",
+        "dynamicConfigPath": "/home/runner/workspace/artifacts/perform-anywhere-mobile/app.config.js",
+        "staticConfigPath": "/home/runner/workspace/artifacts/perform-anywhere-mobile/app.json",
+        "packageJsonPath": "/home/runner/workspace/artifacts/perform-anywhere-mobile/package.json",
+        "pluginHistory": {
+          "expo-splash-screen": {
+            "name": "expo-splash-screen",
+            "version": "57.0.8"
+          },
+          "expo-image-picker": {
+            "name": "expo-image-picker",
+            "version": "57.0.15"
+          }
+        }
+      },
+      "sdkVersion": "57.0.0",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "extra": {
+        "router": {}
+      },
+      "iconUrl": "http://127.0.0.1:8081/assets/./assets/images/icon.png",
+      "hostUri": "cf884a5c-2a11-4f78-8b90-0e262a2e285b-00-gm945a7rzajv.riker.replit.dev/android"
+    },
+    "expoGo": {
+      "debuggerHost": "cf884a5c-2a11-4f78-8b90-0e262a2e285b-00-gm945a7rzajv.riker.replit.dev/android",
+      "developer": {
+        "tool": "expo-cli",
+        "projectRoot": "/home/runner/workspace/artifacts/perform-anywhere-mobile"
+      },
+      "packagerOpts": {
+        "dev": false
+      },
+      "mainModuleName": "artifacts/perform-anywhere-mobile/node_modules/expo-router/entry"
+    },
+    "scopeKey": "@anonymous/perform-anywhere-mobile-4fd7e591-71e8-49af-8c59-ff8ba3dc1c6e"
+  }
+}
