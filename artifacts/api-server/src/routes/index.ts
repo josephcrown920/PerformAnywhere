@@ -1,3 +1,4 @@
+import modelarkDirectorRouter from "./modelark-director.js";
 import { Router, type IRouter } from "express";
 import healthRouter from "./health.js";
 import orchestrateRouter, { paystackWebhookRouter } from "./orchestrate.js";
@@ -7,6 +8,7 @@ import workflowsRouter from "./workflows.js";
 
 const router: IRouter = Router();
 router.use(healthRouter);
+router.use(modelarkDirectorRouter);
 router.use("/orchestrate", orchestrateRouter);
 router.use("/render", renderRouter);
 router.use("/prompt", promptRouter);
